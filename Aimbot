@@ -10,22 +10,24 @@ local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
-local TweenService = game:GetService("TweenService") -- Adicionado para animações suaves
+local TweenService = game:GetService("TweenService")
 
 -- === FUNÇÕES NECESSÁRIAS DO SEU EXPLORE/FRAMEWORK ===
 -- VOCÊ PRECISA GARANTIR QUE ESTAS FUNCIONAM NO SEU EXECUTOR DELTA!
+-- Se o seu executor já define Draw e worldToScreen, você pode remover estas definições.
 local Draw = {
-    Line = function(startPos, endPos, thickness, color) print("Draw.Line", startPos, endPos, thickness, color) end,
-    Box = function(position, size, thickness, color) print("Draw.Box", position, size, thickness, color) end,
-    Text = function(text, font, size, position, color, outline) print("Draw.Text", text, font, size, color, outline) end,
-    Skeleton = function(bones, thickness, color) print("Draw.Skeleton", bones, thickness, color) end,
+    Line = function(startPos, endPos, thickness, color) if startPos and endPos then print("Draw.Line", startPos, endPos, thickness, color) end end,
+    Box = function(position, size, thickness, color) if position and size then print("Draw.Box", position, size, thickness, color) end end,
+    Text = function(text, font, size, position, color, outline) if text and position then print("Draw.Text", text, font, size, position, color, outline) end end,
+    Skeleton = function(bones, thickness, color) if bones then print("Draw.Skeleton", bones, thickness, color) end end,
 }
 
 local function worldToScreen(position)
     local camera = workspace.CurrentCamera
     if camera then
+        -- Usando pcall para evitar erros caso a função não esteja disponível ou cause problemas
         local success, vec2 = pcall(function() return camera:WorldToScreenPoint(position) end)
-        if success and vec2 and vec2.Z > 0.01 then
+        if success and vec2 and vec2.Z > 0.01 then -- Z > 0.01 para garantir que esteja na frente da câmera
             return Vector2.new(vec2.X, vec2.Y)
         end
     end
@@ -48,6 +50,10 @@ local AimbotConfig = {
     DrawCrosshair = true,
     DrawTargetInfo = true,
 
+    -- NOVAS OPÇÕES DE MIRA
+    CrosshairType = "Cross", -- "Cross", "Dot", "Circle"
+    CrosshairSize = 5,       -- Tamanho do crosshair (será usado para o círculo também)
+
     -- Cores
     FOVColor = Color3.fromRGB(200, 200, 200),
     CrosshairColor = Color3.fromRGB(255, 255, 255),
@@ -60,23 +66,24 @@ local GUIConfig = {
     MenuShow = true,
     MenuX = 10,
     MenuY = 100,
-    MenuWidth = 380, -- Largura um pouco maior para mobile
-    MenuHeight = 600, -- Altura maior para mais opções
+    MenuWidth = 380,
+    MenuHeight = 600,
 
-    ButtonX = 10, -- Posição do botão de abrir/fechar menu
+    ButtonX = 10,
     ButtonY = 10,
     ButtonSize = UDim2.new(0, 120, 0, 40),
 }
 
--- === REFERÊNCIAS ===
-local Players = game:GetService("Players")
+-- === REFERÊNCIAS GLOBÁIS ===
+local PlayersService = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
-local LocalPlayer = Players.LocalPlayer
+local TweenService = game:GetService("TweenService")
+local LocalPlayer = PlayersService.LocalPlayer
 local GuiService = LocalPlayer:WaitForChild("PlayerGui")
 
--- === ESTADO DO AIMBOT ===
+-- === ESTADO DO AIMBOT E DA GUI ===
 local IsAimKeyPressed = false
 local AimToggleState = false
 local CurrentTarget = nil
@@ -84,7 +91,7 @@ local CurrentTargetScreenPos = nil
 local IsDraggingMenu = false
 local DragOffset = Vector2.new(0, 0)
 
--- === CRIAÇÃO DA GUI (MOBILE) ===
+-- === CRIAÇÃO DA GUI PRINCIPAL E BOTÃO DE CONTROLE ===
 local mainGui = Instance.new("ScreenGui")
 mainGui.Name = "MobileAimbot_GUI"
 mainGui.Enabled = true
@@ -98,63 +105,19 @@ menuToggleButton.Name = "MenuToggleButton"
 menuToggleButton.Size = GUIConfig.ButtonSize
 menuToggleButton.Position = UDim2.new(0, GUIConfig.ButtonX, 0, GUIConfig.ButtonY)
 menuToggleButton.BackgroundColor3 = Color3.fromRGB(50, 50, 200)
-menuToggleButton.Text = "Abrir Menu"
+menuToggleButton.Text = "Abrir Menu" -- Texto inicial
 menuToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 menuToggleButton.Font = Enum.Font.SourceSansBold
 menuToggleButton.TextScaled = true
-menuToggleButton.Parent = mainGui
-menuToggleButton.MouseButton1Click:Connect(function()
-    GUIConfig.MenuShow = not GUIConfig.MenuShow
-    if menuFrame then menuFrame.Visible = GUIConfig.MenuShow end
-    menuToggleButton.Text = GUIConfig.MenuShow and "Fechar Menu" or "Abrir Menu"
-end)
+menuToggleButton.Parent = mainGui -- PARENTADO NA ScreenGui PRINCIPAL
 
--- Frame Principal do Menu
-local menuFrame = Instance.new("Frame")
-menuFrame.Name = "MobileAimbot_MenuFrame"
-menuFrame.Size = UDim2.new(0, GUIConfig.MenuWidth, 0, GUIConfig.MenuHeight)
-menuFrame.Position = UDim2.new(0, GUIConfig.MenuX, 0, GUIConfig.MenuY)
-menuFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-menuFrame.BorderColor3 = Color3.fromRGB(40, 40, 40)
-menuFrame.BorderSizePixel = 2
-menuFrame.Visible = GUIConfig.MenuShow
-menuFrame.Parent = mainGui
-
--- Barra de Título para arrastar
-local titleBar = Instance.new("Frame")
-titleBar.Name = "TitleBar"
-titleBar.Size = UDim2.new(1, 0, 0, 30)
-titleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-titleBar.BorderColor3 = Color3.fromRGB(50, 50, 50)
-titleBar.BorderSizePixel = 1
-titleBar.Parent = menuFrame
-local titleLabel = Instance.new("TextLabel")
-titleLabel.Text = "Wallhack Aimbot"
-titleLabel.Size = UDim2.new(1, 0, 1, 0)
-titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-titleLabel.Font = Enum.Font.SourceSansBold
-titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-titleLabel.TextYAlignment = Enum.TextYAlignment.Center
-titleLabel.TextScaled = true
-titleLabel.BackgroundTransparency = 1
-titleLabel.PaddingLeft = UDim.new(0, 10)
-titleLabel.Parent = titleBar
-titleBar.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then IsDraggingMenu = true; DragOffset = input.Position - menuFrame.AbsolutePosition end end)
-titleBar.InputEnded:Connect(function() IsDraggingMenu = false end)
-
--- Scrolling Frame para o conteúdo
-local scrollFrame = Instance.new("ScrollingFrame")
-scrollFrame.Name = "ScrollFrame"
-scrollFrame.Size = UDim2.new(1, 0, 1, -40)
-scrollFrame.Position = UDim2.new(0, 0, 0, 30)
-scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 600) -- Ajuste conforme necessário
-scrollFrame.ScrollBarThickness = 6
-scrollFrame.BackgroundTransparency = 1
-scrollFrame.Parent = menuFrame
+-- Frame Principal do Menu (Será criado pela função createMenuUI)
+local menuFrame = nil -- Inicializa como nil
 
 -- ==================================================
--- == REUTILIZANDO FUNÇÕES AUXILIARES DE GUI (Mobile) ==
+-- == FUNÇÕES AUXILIARES DE CRIAÇÃO DE ELEMENTOS GUI ==
 -- ==================================================
+-- (Estas funções são as mesmas dos exemplos anteriores, garantindo que estão aqui)
 
 local function createSection(parent, title, yPos, height)
     local section = Instance.new("Frame")
@@ -179,7 +142,7 @@ end
 
 local function createToggleSwitch(parent, label, initialValue, position, callback)
     local container = Instance.new("Frame")
-    container.Size = UDim2.new(0.5, -5, 0, 35) -- Altura maior para toque
+    container.Size = UDim2.new(0.5, -5, 0, 35)
     container.Position = position
     container.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     container.BorderColor3 = Color3.fromRGB(50, 50, 50)
@@ -213,7 +176,7 @@ end
 
 local function createDropdown(parent, label, options, initialValue, position, callback)
     local container = Instance.new("Frame")
-    container.Size = UDim2.new(0.5, -5, 0, 35) -- Altura maior
+    container.Size = UDim2.new(0.5, -5, 0, 35)
     container.Position = position
     container.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     container.BorderColor3 = Color3.fromRGB(50, 50, 50)
@@ -271,10 +234,9 @@ local function createDropdown(parent, label, options, initialValue, position, ca
     return container
 end
 
--- Função para criar um slider (pode ser difícil em mobile, mas vamos incluir)
 local function createSlider(parent, label, minVal, maxVal, initialVal, position, callback)
     local container = Instance.new("Frame")
-    container.Size = UDim2.new(1, -10, 0, 40) -- Altura maior
+    container.Size = UDim2.new(1, -10, 0, 40)
     container.Position = position
     container.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     container.BorderColor3 = Color3.fromRGB(50, 50, 50)
@@ -292,14 +254,14 @@ local function createSlider(parent, label, minVal, maxVal, initialVal, position,
     labelText.Parent = labelText
     local sliderBar = Instance.new("Frame")
     sliderBar.Name = "SliderBar"
-    sliderBar.Size = UDim2.new(1, -10, 0, 12) -- Largura total menos bordas
-    sliderBar.Position = UDim2.new(0, 5, 0, 18) -- Abaixo do label
+    sliderBar.Size = UDim2.new(1, -10, 0, 12)
+    sliderBar.Position = UDim2.new(0, 5, 0, 18)
     sliderBar.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
     sliderBar.BackgroundTransparency = 0.3
     sliderBar.Parent = container
     local sliderHandle = Instance.new("Frame")
     sliderHandle.Name = "SliderHandle"
-    sliderHandle.Size = UDim2.new(0, 20, 1, 0) -- Handle um pouco maior
+    sliderHandle.Size = UDim2.new(0, 20, 1, 0)
     local initialHandlePos = (initialVal - minVal) / (maxVal - minVal) * (sliderBar.Size.X.Offset - sliderHandle.Size.X.Offset)
     sliderHandle.Position = UDim2.new(0, initialHandlePos, 0, 0)
     sliderHandle.BackgroundColor3 = Color3.fromRGB(180, 180, 180)
@@ -314,40 +276,9 @@ local function createSlider(parent, label, minVal, maxVal, initialVal, position,
     return container
 end
 
-
--- ==================================================
--- == POPULAÇÃO DA GUI COM BASE NAS CONFIGURAÇÕES ==
--- ==================================================
-local currentY = 5
-
--- Seção Aimbot
-local sectionAimbot = createSection(scrollFrame, "Aimbot", currentY, 300) -- Ajuste a altura conforme necessário
-currentY = currentY + sectionAimbot.Size.Y.Offset + 10
-
-createToggleSwitch(sectionAimbot, "Ativar Aimbot", AimbotConfig.Enabled, UDim2.new(0.5, -5, 0, 30), function(state) AimbotConfig.Enabled = state end)
-createDropdown(sectionAimbot, "Modo Tecla", {"Hold", "Toggle"}, AimbotConfig.AimKeyMode, UDim2.new(0, 5, 0, 30), function(value) AimbotConfig.AimKeyMode = value end)
-local aimKeyDropdown = createDropdown(sectionAimbot, "Tecla Mira", {"Mouse1", "Mouse2", "Q", "E", "R", "F", "X", "Z"}, "Mouse1", UDim2.new(0.5, -5, 0, 65), function(value)
-    local keyMap = {
-        Mouse1 = Enum.KeyCode.Button1, Mouse2 = Enum.KeyCode.Button2, Q = Enum.KeyCode.Q, E = Enum.KeyCode.E,
-        R = Enum.KeyCode.R, F = Enum.KeyCode.F, X = Enum.KeyCode.X, Z = Enum.KeyCode.Z
-    }
-    AimbotConfig.AimKey = keyMap[value] or Enum.KeyCode.Button1
-end)
-aimKeyDropdown.Position = UDim2.new(0, 5, 0, 65)
-
-createDropdown(sectionAimbot, "Alvo", {"Head", "Chest", "Legs", "Root"}, AimbotConfig.TargetType, UDim2.new(0.5, -5, 0, 65), function(value) AimbotConfig.TargetType = value end)
-createSlider(sectionAimbot, "FOV", 1, 60, AimbotConfig.FOV, UDim2.new(0, 0, 0, 95), function(value) AimbotConfig.FOV = value end)
-createSlider(sectionAimbot, "Distância Máx.", 50, 800, AimbotConfig.MaxDistance, UDim2.new(0.5, -5, 0, 95), function(value) AimbotConfig.MaxDistance = value end)
-createToggleSwitch(sectionAimbot, "Desenhar FOV", AimbotConfig.DrawFOV, UDim2.new(0, 5, 0, 125), function(state) AimbotConfig.DrawFOV = state end)
-createToggleSwitch(sectionAimbot, "Desenhar Mira", AimbotConfig.DrawCrosshair, UDim2.new(0.5, -5, 0, 125), function(state) AimbotConfig.DrawCrosshair = state end)
-createToggleSwitch(sectionAimbot, "Info Alvo", AimbotConfig.DrawTargetInfo, UDim2.new(0, 5, 0, 155), function(state) AimbotConfig.DrawTargetInfo = state end)
-
--- Seção Cores
-local sectionColors = createSection(scrollFrame, "Cores", currentY, 150)
-currentY = currentY + sectionColors.Size.Y.Offset + 10
 local function createColorPickerButton(parent, label, initialColor, position, callback)
     local container = Instance.new("Frame")
-    container.Size = UDim2.new(0.5, -5, 0, 35) -- Altura maior
+    container.Size = UDim2.new(0.5, -5, 0, 35)
     container.Position = position
     container.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     container.BorderColor3 = Color3.fromRGB(50, 50, 50)
@@ -380,18 +311,147 @@ local function createColorPickerButton(parent, label, initialColor, position, ca
     end)
     return container
 end
-createColorPickerButton(sectionColors, "Cor FOV", AimbotConfig.FOVColor, UDim2.new(0.5, -5, 0, 30), function(newColor) AimbotConfig.FOVColor = newColor end)
-createColorPickerButton(sectionColors, "Cor Mira", AimbotConfig.CrosshairColor, UDim2.new(0, 5, 0, 30), function(newColor) AimbotConfig.CrosshairColor = newColor end)
-createColorPickerButton(sectionColors, "Cor Info Alvo", AimbotConfig.TargetInfoColor, UDim2.new(0.5, -5, 0, 60), function(newColor) AimbotConfig.TargetInfoColor = newColor end)
 
-scrollFrame.CanvasSize = UDim2.new(0, 0, 0, currentY)
+
+-- ==================================================
+-- == CRIAÇÃO DA GUI DE MENU E SEUS ELEMENTOS ==
+-- ==================================================
+local function createMenuUI()
+    -- Cria o frame principal do menu se ele ainda não existir
+    if not menuFrame then
+        menuFrame = Instance.new("Frame")
+        menuFrame.Name = "MobileAimbot_MenuFrame"
+        menuFrame.Size = UDim2.new(0, GUIConfig.MenuWidth, 0, GUIConfig.MenuHeight)
+        menuFrame.Position = UDim2.new(0, GUIConfig.MenuX, 0, GUIConfig.MenuY)
+        menuFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+        menuFrame.BorderColor3 = Color3.fromRGB(40, 40, 40)
+        menuFrame.BorderSizePixel = 2
+        menuFrame.Visible = GUIConfig.MenuShow
+        menuFrame.Parent = mainGui -- PARENTADO NA ScreenGui PRINCIPAL
+
+        -- Barra de Título para arrastar
+        local titleBar = Instance.new("Frame")
+        titleBar.Name = "TitleBar"
+        titleBar.Size = UDim2.new(1, 0, 0, 30)
+        titleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+        titleBar.BorderColor3 = Color3.fromRGB(50, 50, 50)
+        titleBar.BorderSizePixel = 1
+        titleBar.Parent = menuFrame
+        local titleLabel = Instance.new("TextLabel")
+        titleLabel.Text = "Wallhack Aimbot"
+        titleLabel.Size = UDim2.new(1, 0, 1, 0)
+        titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        titleLabel.Font = Enum.Font.SourceSansBold
+        titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+        titleLabel.TextYAlignment = Enum.TextYAlignment.Center
+        titleLabel.TextScaled = true
+        titleLabel.BackgroundTransparency = 1
+        titleLabel.PaddingLeft = UDim.new(0, 10)
+        titleLabel.Parent = titleBar
+        titleBar.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then IsDraggingMenu = true; DragOffset = input.Position - menuFrame.AbsolutePosition end end)
+        titleBar.InputEnded:Connect(function() IsDraggingMenu = false end)
+
+        -- Scrolling Frame para o conteúdo
+        local scrollFrame = Instance.new("ScrollingFrame")
+        scrollFrame.Name = "ScrollFrame"
+        scrollFrame.Size = UDim2.new(1, 0, 1, -40)
+        scrollFrame.Position = UDim2.new(0, 0, 0, 30)
+        scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 600) -- Ajuste conforme necessário
+        scrollFrame.ScrollBarThickness = 6
+        scrollFrame.BackgroundTransparency = 1
+        scrollFrame.Parent = menuFrame
+
+        local currentY = 5
+
+        -- Seção Aimbot
+        local sectionAimbot = createSection(scrollFrame, "Aimbot", currentY, 350) -- Altura aumentada
+        currentY = currentY + sectionAimbot.Size.Y.Offset + 10
+
+        createToggleSwitch(sectionAimbot, "Ativar Aimbot", AimbotConfig.Enabled, UDim2.new(0.5, -5, 0, 30), function(state) AimbotConfig.Enabled = state end)
+        createDropdown(sectionAimbot, "Modo Tecla", {"Hold", "Toggle"}, AimbotConfig.AimKeyMode, UDim2.new(0, 5, 0, 30), function(value) AimbotConfig.AimKeyMode = value end)
+        local aimKeyDropdown = createDropdown(sectionAimbot, "Tecla Mira", {"Mouse1", "Mouse2", "Q", "E", "R", "F", "X", "Z"}, "Mouse1", UDim2.new(0.5, -5, 0, 65), function(value)
+            local keyMap = {
+                Mouse1 = Enum.KeyCode.Button1, Mouse2 = Enum.KeyCode.Button2, Q = Enum.KeyCode.Q, E = Enum.KeyCode.E,
+                R = Enum.KeyCode.R, F = Enum.KeyCode.F, X = Enum.KeyCode.X, Z = Enum.KeyCode.Z
+            }
+            AimbotConfig.AimKey = keyMap[value] or Enum.KeyCode.Button1
+        end)
+        aimKeyDropdown.Position = UDim2.new(0, 5, 0, 65)
+
+        createDropdown(sectionAimbot, "Alvo", {"Head", "Chest", "Legs", "Root"}, AimbotConfig.TargetType, UDim2.new(0.5, -5, 0, 65), function(value) AimbotConfig.TargetType = value end)
+        createSlider(sectionAimbot, "FOV", 1, 60, AimbotConfig.FOV, UDim2.new(0, 0, 0, 95), function(value) AimbotConfig.FOV = value end)
+        createSlider(sectionAimbot, "Distância Máx.", 50, 800, AimbotConfig.MaxDistance, UDim2.new(0.5, -5, 0, 95), function(value) AimbotConfig.MaxDistance = value end)
+        createToggleSwitch(sectionAimbot, "Desenhar FOV", AimbotConfig.DrawFOV, UDim2.new(0, 5, 0, 125), function(state) AimbotConfig.DrawFOV = state end)
+        createToggleSwitch(sectionAimbot, "Desenhar Mira", AimbotConfig.DrawCrosshair, UDim2.new(0.5, -5, 0, 125), function(state) AimbotConfig.DrawCrosshair = state end)
+        createToggleSwitch(sectionAimbot, "Info Alvo", AimbotConfig.DrawTargetInfo, UDim2.new(0, 5, 0, 155), function(state) AimbotConfig.DrawTargetInfo = state end)
+
+        -- Novos controles de Mira
+        createDropdown(sectionAimbot, "Tipo de Mira", {"Cross", "Dot", "Circle"}, AimbotConfig.CrosshairType, UDim2.new(0.5, -5, 0, 185), function(value) AimbotConfig.CrosshairType = value end)
+        createSlider(sectionAimbot, "Tamanho Mira", 2, 20, AimbotConfig.CrosshairSize, UDim2.new(0, 0, 0, 215), function(value) AimbotConfig.CrosshairSize = value end)
+
+
+        -- Seção Cores
+        local sectionColors = createSection(scrollFrame, "Cores", currentY, 150)
+        currentY = currentY + sectionColors.Size.Y.Offset + 10
+        createColorPickerButton(sectionColors, "Cor FOV", AimbotConfig.FOVColor, UDim2.new(0.5, -5, 0, 30), function(newColor) AimbotConfig.FOVColor = newColor end)
+        createColorPickerButton(sectionColors, "Cor Mira", AimbotConfig.CrosshairColor, UDim2.new(0, 5, 0, 30), function(newColor) AimbotConfig.CrosshairColor = newColor end)
+        createColorPickerButton(sectionColors, "Cor Info Alvo", AimbotConfig.TargetInfoColor, UDim2.new(0.5, -5, 0, 60), function(newColor) AimbotConfig.TargetInfoColor = newColor end)
+
+        -- Atualiza o tamanho do CanvasFrame para o conteúdo
+        scrollFrame.CanvasSize = UDim2.new(0, 0, 0, currentY)
+    end
+
+    -- Garante que o menuFrame esteja visível conforme a configuração
+    if menuFrame then
+        menuFrame.Visible = GUIConfig.MenuShow
+        menuFrame.Position = UDim2.new(0, GUIConfig.MenuX, 0, GUIConfig.MenuY)
+    end
+end
+
+-- === INICIALIZAÇÃO DA GUI E DO BOTÃO DE CONTROLE ===
+-- Chamar createMenuUI() AGORA para garantir que o frame do menu seja criado
+createMenuUI()
+
+-- Adiciona a lógica para o botão de alternar a visibilidade da GUI principal
+menuToggleButton.MouseButton1Click:Connect(function()
+    GUIConfig.MenuShow = not GUIConfig.MenuShow
+    if menuFrame then
+        menuFrame.Visible = GUIConfig.MenuShow
+        -- Tenta suavizar a aparição/desaparição se TweenService estiver disponível
+        if TweenService then
+            local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+            local properties = { Position = UDim2.new(0, GUIConfig.MenuX, 0, GUIConfig.MenuY) } -- Garante que a posição seja aplicada
+            if GUIConfig.MenuShow then
+                properties.BackgroundTransparency = 0
+                menuFrame.BackgroundTransparency = 1 -- Começa transparente
+                local tween = TweenService:Create(menuFrame, tweenInfo, properties)
+                tween:Play()
+            else
+                properties.BackgroundTransparency = 1
+                menuFrame.BackgroundTransparency = 0 -- Começa opaco
+                local tween = TweenService:Create(menuFrame, tweenInfo, properties)
+                tween:Play()
+                tween.Completed:Connect(function()
+                    -- Pode ser necessário esconder após o tween para não interferir com cliques
+                    menuFrame.Visible = false
+                end)
+            end
+        else
+            -- Se TweenService não estiver disponível, apenas atualiza a visibilidade
+            menuFrame.Visible = GUIConfig.MenuShow
+        end
+    end
+    menuToggleButton.Text = GUIConfig.MenuShow and "Fechar Menu" or "Abrir Menu"
+end)
+
 
 -- ==================================================
 -- == FUNÇÕES DO AIMBOT (IDÊNTICAS AO SCRIPT ANTERIOR) ==
 -- ==================================================
+-- (As funções aimAt, findBestTarget, getLocalPlayerInfo, etc. permanecem as mesmas)
 
 local function getLocalPlayerInfo()
-    local player = Players.LocalPlayer
+    local player = PlayersService.LocalPlayer
     if player and player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
         return player, player.Character
     end
@@ -449,12 +509,13 @@ local function findBestTarget()
     if not player or not character then return nil, nil, nil end
     local localTeam = getPlayerTeam(player)
 
-    for _, otherPlayer in ipairs(Players:GetPlayers()) do
+    for _, otherPlayer in ipairs(PlayersService:GetPlayers()) do
         if otherPlayer ~= player then
             local otherCharacter = otherPlayer.Character
             if otherCharacter and otherCharacter:FindFirstChild("Humanoid") and otherCharacter:FindFirstChild("HumanoidRootPart") then
                 local otherTeam = getPlayerTeam(otherPlayer)
 
+                -- A lógica de ignorar time está correta aqui
                 if not AimbotConfig.Enabled or not AimbotConfig.IgnoreTeam or (localTeam ~= otherTeam or otherTeam == nil) then
                     local rootPart = otherCharacter:FindFirstChild("HumanoidRootPart")
                     if rootPart and (rootPart.Position - character.HumanoidRootPart.Position).Magnitude <= AimbotConfig.MaxDistance then
@@ -468,7 +529,7 @@ local function findBestTarget()
                                         closestScreenDist = distToCenter
                                         bestTargetPart = targetPart
                                         bestTargetPlayer = otherPlayer
-                                        CurrentTargetScreenPos = targetScreenPos -- Atualiza a posição na tela do alvo atual
+                                        CurrentTargetScreenPos = targetScreenPos
                                     end
                                 end
                             end
@@ -478,7 +539,7 @@ local function findBestTarget()
             end
         end
     end
-    return bestTargetPart, bestTargetPlayer, CurrentTargetScreenPos -- Retorna a posição na tela do alvo
+    return bestTargetPart, bestTargetPlayer, CurrentTargetScreenPos
 end
 
 local function aimAt(targetPart, targetPlayer, targetScreenPos)
@@ -497,20 +558,66 @@ local function aimAt(targetPart, targetPlayer, targetScreenPos)
     if camera.CFrame then camera.CFrame = newCameraCFrame
     elseif camera.CoordinateFrame then camera.CoordinateFrame = newCameraCFrame end
 
-    CurrentTarget = targetPlayer -- Atualiza o alvo global para desenho
+    CurrentTarget = targetPlayer
 end
+
 
 -- ==================================================
 -- == LOOP PRINCIPAL E CONTROLE DE ENTRADA (MOBILE) ==
 -- ==================================================
 RunService.RenderStepped:Connect(function()
-    -- Atualiza GUI
-    if menuFrame then menuFrame.Visible = GUIConfig.MenuShow end
+    -- Garantir que a GUI principal e o frame do menu existam
+    if GUIConfig.MenuEnabled then
+        if not mainGui then -- Cria a ScreenGui principal se não existir
+            mainGui = Instance.new("ScreenGui")
+            mainGui.Name = "MobileAimbot_GUI"
+            mainGui.Enabled = true
+            mainGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+            mainGui.ResetOnSpawn = false
+            mainGui.Parent = GuiService
 
+            -- Recria o botão de toggle se a ScreenGui foi recriada
+            menuToggleButton = Instance.new("TextButton")
+            menuToggleButton.Name = "MenuToggleButton"
+            menuToggleButton.Size = GUIConfig.ButtonSize
+            menuToggleButton.Position = UDim2.new(0, GUIConfig.ButtonX, 0, GUIConfig.ButtonY)
+            menuToggleButton.BackgroundColor3 = Color3.fromRGB(50, 50, 200)
+            menuToggleButton.Text = GUIConfig.MenuShow and "Fechar Menu" or "Abrir Menu"
+            menuToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+            menuToggleButton.Font = Enum.Font.SourceSansBold
+            menuToggleButton.TextScaled = true
+            menuToggleButton.Parent = mainGui
+
+            -- Reconecta o clique do botão de toggle
+            menuToggleButton.MouseButton1Click:Connect(function()
+                GUIConfig.MenuShow = not GUIConfig.MenuShow
+                if menuFrame then menuFrame.Visible = GUIConfig.MenuShow end
+                menuToggleButton.Text = GUIConfig.MenuShow and "Fechar Menu" or "Abrir Menu"
+            end)
+        end
+        -- Garante que o botão de toggle esteja visível e posicionado
+        menuToggleButton.Visible = true
+        menuToggleButton.Position = UDim2.new(0, GUIConfig.ButtonX, 0, GUIConfig.ButtonY)
+
+        -- Chama a função para criar/atualizar o frame do menu
+        createMenuUI()
+
+        -- Atualiza a visibilidade e posição do frame do menu
+        if menuFrame then
+            menuFrame.Visible = GUIConfig.MenuShow
+            menuFrame.Position = UDim2.new(0, GUIConfig.MenuX, 0, GUIConfig.MenuY)
+        end
+    else
+        -- Esconde ou destrói elementos se o menu estiver desabilitado globalmente
+        if menuToggleButton then menuToggleButton.Visible = false end
+        if menuFrame then menuFrame.Visible = false end
+    end
+
+    -- Lógica do Aimbot
     local player, character = getLocalPlayerInfo()
     if not player or not character then
         IsAimKeyPressed = false
-        AimbotConfig.Enabled = false -- Desativa aimbot se o jogador morrer
+        AimbotConfig.Enabled = false
         CurrentTarget = nil
         return
     end
@@ -518,9 +625,8 @@ RunService.RenderStepped:Connect(function()
     local camera = workspace.CurrentCamera
     if not camera then return end
 
-    -- Lógica da Tecla de Mira (adaptada para mobile)
-    local currentAimKeyPressed = UserInputService:IsKeyDown(AimbotConfig.AimKey) -- Funciona se você conectar um teclado/mouse, ou se o executor simular
-
+    -- Lógica da Tecla de Mira (Continua a mesma para input de mouse/teclado se disponível)
+    local currentAimKeyPressed = UserInputService:IsKeyDown(AimbotConfig.AimKey)
     if AimbotConfig.AimKeyMode == "Hold" then
         IsAimKeyPressed = currentAimKeyPressed
     elseif AimbotConfig.AimKeyMode == "Toggle" then
@@ -531,16 +637,15 @@ RunService.RenderStepped:Connect(function()
         IsAimKeyPressed = currentAimKeyPressed
     end
 
-    -- Lógica de Aimbot
     if AimbotConfig.Enabled and IsAimKeyPressed then
         local targetPart, targetPlayer, targetScreenPos = findBestTarget()
         if targetPart then
             aimAt(targetPart, targetPlayer, targetScreenPos)
         else
-            CurrentTarget = nil -- Limpa o alvo se nenhum for encontrado
+            CurrentTarget = nil
         end
     else
-        CurrentTarget = nil -- Limpa o alvo se desativado ou tecla não pressionada
+        CurrentTarget = nil
     end
 
     -- Desenha indicadores na tela
@@ -548,60 +653,24 @@ RunService.RenderStepped:Connect(function()
         local screenCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
 
         if AimbotConfig.DrawFOV then
-            -- Desenho simplificado do FOV com cruz
             Draw.Line(Vector2.new(screenCenter.X - AimbotConfig.FOV, screenCenter.Y), Vector2.new(screenCenter.X + AimbotConfig.FOV, screenCenter.Y), 2, AimbotConfig.FOVColor)
             Draw.Line(Vector2.new(screenCenter.X, screenCenter.Y - AimbotConfig.FOV), Vector2.new(screenCenter.X, screenCenter.Y + AimbotConfig.FOV), 2, AimbotConfig.FOVColor)
         end
 
         if AimbotConfig.DrawCrosshair then
-            Draw.Line(Vector2.new(screenCenter.X - 5, screenCenter.Y), Vector2.new(screenCenter.X + 5, screenCenter.Y), 2, AimbotConfig.CrosshairColor)
-            Draw.Line(Vector2.new(screenCenter.X, screenCenter.Y - 5), Vector2.new(screenCenter.X, screenCenter.Y + 5), 2, AimbotConfig.CrosshairColor)
-        end
-
-        if AimbotConfig.DrawTargetInfo and CurrentTarget and CurrentTargetScreenPos then
-            local targetPlayerName = CurrentTarget.Name
-            local distance = "???m"
-            if character and character.HumanoidRootPart and CurrentTarget.Character and CurrentTarget.Character.HumanoidRootPart then
-                distance = math.floor((CurrentTarget.Character.HumanoidRootPart.Position - character.HumanoidRootPart.Position).Magnitude) .. "m"
-            end
-            local infoText = targetPlayerName .. " (" .. distance .. ")"
-            Draw.Text(infoText, Enum.Font.SourceSansBold, 14, Vector2.new(CurrentTargetScreenPos.X, CurrentTargetScreenPos.Y + 20), AimbotConfig.TargetInfoColor, true)
-        end
-    end
-end)
-
--- Controles de Entrada (Mouse/Teclado se houver)
-UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
-    -- Lógica da Tecla de Mira (funciona se Delta mapeia o Button1 para clique)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 and AimbotConfig.AimKeyMode == "Hold" then
-        if input.KeyCode == AimbotConfig.AimKey then
-            AimbotConfig.Enabled = true
-        end
-    elseif input.UserInputType == Enum.UserInputType.MouseButton1 and AimbotConfig.AimKeyMode == "Toggle" then
-        if input.KeyCode == AimbotConfig.AimKey then
-            AimToggleState = not AimToggleState
-            AimbotConfig.Enabled = AimToggleState
-        end
-    end
-
-    -- Lógica para mover o menu
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        if IsDraggingMenu then IsDraggingMenu = false end
-    end
-end)
-
-UserInputService.InputEnded:Connect(function(input, gameProcessedEvent)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 and AimbotConfig.AimKeyMode == "Hold" then
-        if input.KeyCode == AimbotConfig.AimKey then
-            AimbotConfig.Enabled = false
-        end
-    end
-end)
-
--- ==================================================
--- == INICIALIZAÇÃO FINAL ==
--- ==================================================
-print("Script Aimbot Wallhack (Mobile) para Delta carregado.")
-print("AVISO: Wallhacks são detectáveis e podem levar a banimentos.")
-
-  
+            local size = AimbotConfig.CrosshairSize
+            if AimbotConfig.CrosshairType == "Cross" then
+                Draw.Line(Vector2.new(screenCenter.X - size, screenCenter.Y), Vector2.new(screenCenter.X + size, screenCenter.Y), 2, AimbotConfig.CrosshairColor)
+                Draw.Line(Vector2.new(screenCenter.X, screenCenter.Y - size), Vector2.new(screenCenter.X, screenCenter.Y + size), 2, AimbotConfig.CrosshairColor)
+            elseif AimbotConfig.CrosshairType == "Dot" then
+                Draw.Box(Vector2.new(screenCenter.X - 1, screenCenter.Y - 1), Vector2.new(2, 2), 2, AimbotConfig.CrosshairColor)
+            elseif AimbotConfig.CrosshairType == "Circle" then
+                local radius = size
+                local segments = 20
+                for i = 0, segments do
+                    local angle1 = (i / segments) * 2 * math.pi
+                    local angle2 = ((i + 1) / segments) * 2 * math.pi
+                    local x1, y1 = screenCenter.X + radius * math.cos(angle1), screenCenter.Y + radius * math.sin(angle1)
+                    local x2, y2 = screenCenter.X + radius * math.cos(angle2), screenCenter.Y + radius * math.sin(angle2)
+                    Draw.Line(Vector2.new(x1, y1), Vector2.new(x2, y2), 2, AimbotConfig.CrosshairColor)
+                
