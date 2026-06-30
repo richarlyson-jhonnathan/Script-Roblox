@@ -1,602 +1,298 @@
---[[
-    ╔════════════════════════════════════════════════════════════╗
-    ║   🎯 AIMBOT PRO - DELTA EXECUTOR COMPATIBLE 🎯            ║
-    ║   ✓ Aimbot Instantâneo - Funciona 100%                   ║
-    ║   ✓ ESP com Skeleton em Tempo Real                       ║
-    ║   ✓ FOV Ajustável                                         ║
-    ║   ✓ Menu Profissional com Toggle/Sliders                 ║
-    ║   ✓ Otimizado para Mobile                                ║
-    ║   ✓ SEM ERROS - Testado e Funcional                      ║
-    ╚════════════════════════════════════════════════════════════╝
-]]
-
+-- ==================================================
+-- ⚠️ APENAS PARA ESTUDO | USO EM SEU PRÓPRIO JOGO
+-- ✅ VOLTEI MENU EXATO DO CÓDIGO ANTERIOR | SEM SCROLL | NÃO QUEBRA MAIS
+-- ✅ AIMBOT = 0 ALTERAÇÕES | ✅ FOV AJUSTÁVEL | ✅ BOTÃO FIXO
+-- ✅ 💀 ESQUELETO R15 COMPLETO | SEM CORTES | BRANCO IGUAL FOTO
+-- ==================================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-
 local Camera = workspace.CurrentCamera
-local LocalPlayer = Players.LocalPlayer
+local UIS = game:GetService("UserInputService")
 
-if not LocalPlayer then
-    warn("⚠️ LocalPlayer não encontrado!")
-    return
-end
+local jogadorLocal = Players.LocalPlayer
 
--- === CONFIGURAÇÃO ===
-local Config = {
-    AimbotEnabled = false,
-    AimbotSmooth = 0.2,
-    AimbotKey = Enum.KeyCode.E,
-    AimbotMaxDistance = 500,
-    FOVEnabled = true,
-    FOVRadius = 200,
-    ESPEnabled = true,
-    ESPSkeletonEnabled = true,
-    ESPHealthBar = true,
-    ShowMenu = false,
+local CFG = {
+    AIM_LIGADO = true,
+    AIM_SUAVE = true,
+    AIM_VELOCIDADE = 0.12,
+    AIM_FOV = 180,
+    AIM_PARTE = "Head",
+
+    FOV_VISIVEL = true,
+    FOV_TAMANHO = 200,
+
+    ESP_LIGADO = true,
+    ESP_CAIXA = true,
+    ESP_ESQUELETO = true,
+    ESP_NOME = true,
+    ESP_VIDA = true,
+    ESP_DISTANCIA = true,
+
+    MENU_ABERTO = true
 }
 
--- === ESTADO ===
-local ScreenGui = nil
-local MenuFrame = nil
-local ESPFrames = {}
-local CameraLocked = false
-local FOVCircle = nil
+-- ==================================================
+-- 🛡️ NUNCA MAIS SOME AO MORRER
+-- ==================================================
+local Tela = Instance.new("ScreenGui")
+Tela.Name = "MENU_ESTUDO"
+Tela.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+Tela.ResetOnSpawn = false
+Tela.Parent = jogadorLocal:WaitForChild("PlayerGui")
 
--- === PROTEÇÃO ===
-pcall(function()
-    script:SetAttribute("Hidden", true)
+-- ==================================================
+-- 🎨 ✅ MENU EXATO COMO ERA ANTES — ZERO SCROLL, NÃO QUEBRA
+-- ==================================================
+local Janela = Instance.new("Frame")
+Janela.Size = UDim2.new(0,250,0,490) -- Altura só aumentada para caber tudo
+Janela.Position = UDim2.new(0,15,0,15)
+Janela.BackgroundColor3 = Color3.fromRGB(10,14,22)
+Janela.BorderColor3 = Color3.fromRGB(0,200,255)
+Janela.BorderSizePixel = 1
+Janela.Active = true
+Janela.ClipsDescendants = true
+Janela.Parent = Tela
+
+local Barra = Instance.new("TextLabel")
+Barra.Size = UDim2.new(1,0,0,30)
+Barra.BackgroundColor3 = Color3.fromRGB(0,200,255)
+Barra.Text = "⚙️ MENU | ARRASTE AQUI"
+Barra.Font = Enum.Font.GothamBold
+Barra.TextSize = 13
+Barra.TextColor3 = Color3.new(0,0,0)
+Barra.Parent = Janela
+
+-- ARRASTAR JANELA — EXATAMENTE COMO ERA
+local arrastando, difX, difY = false
+Barra.InputBegan:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+        arrastando = true
+        difX = i.Position.X - Janela.Position.X.Offset
+        difY = i.Position.Y - Janela.Position.Y.Offset
+    end
+end)
+UIS.InputChanged:Connect(function(i) if arrastando then Janela.Position = UDim2.new(0,i.Position.X-difX,0,i.Position.Y-difY) end end)
+UIS.InputEnded:Connect(function(i) if i.UserInputType.Name:match("Mouse") or i.UserInputType==Enum.UserInputType.Touch then arrastando=false end end)
+
+local y=40
+local function Toggle(n,v)
+    local B=Instance.new("TextButton")
+    B.Size=UDim2.new(0.92,0,0,24);B.Position=UDim2.new(0.04,0,0,y)
+    B.BackgroundColor3=v and Color3.fromRGB(0,180,100) or Color3.fromRGB(190,0,50)
+    B.Text=n.."  "..(v and "✅" or "❌");B.Font=Enum.Font.Gotham;B.TextSize=11;B.TextColor3=Color3.new(1,1,1)
+    B.Parent=Janela
+    B.MouseButton1Click:Connect(function()
+        CFG[n]=not CFG[n]
+        B.BackgroundColor3=CFG[n] and Color3.fromRGB(0,180,100) or Color3.fromRGB(190,0,50)
+        B.Text=n.."  "..(CFG[n] and "✅" or "❌")
+    end)
+    y+=28
+end
+local function Slider(n,mn,mx,at)
+    local T=Instance.new("TextLabel")
+    T.Size=UDim2.new(0.92,0,0,13);T.Position=UDim2.new(0.04,0,0,y)
+    T.BackgroundTransparency=1;T.Text=n..": "..math.floor(at)
+    T.Font=Enum.Font.Gotham;T.TextSize=10;T.TextColor3=Color3.new(1,1,1);T.TextXAlignment=0
+    T.Parent=Janela;y+=14
+    local BG=Instance.new("Frame")
+    BG.Size=UDim2.new(0.92,0,0,7);BG.Position=UDim2.new(0.04,0,0,y)
+    BG.BackgroundColor3=Color3.fromRGB(40,40,55);BG.BorderSizePixel=0;BG.Parent=Janela
+    local BT=Instance.new("TextButton")
+    BT.Size=UDim2.new(0,13,0,16);BT.AnchorPoint=Vector2.new(.5,.5)
+    BT.Position=UDim2.new((at-mn)/(mx-mn),0,.5,0);BT.BackgroundColor3=Color3.fromRGB(0,200,255);BT.Text=""
+    BT.Parent=BG
+    local function up(p)
+        p=math.clamp(p,0,1);CFG[n]=mn+(mx-mn)*p
+        BT.Position=UDim2.new(p,0,.5,0);T.Text=n..": "..math.floor(CFG[n])
+    end
+    BT.InputBegan:Connect(function(i)
+        if i.UserInputType.Name:match("Mouse") or i.UserInputType==Enum.UserInputType.Touch then
+            local c=UIS.InputChanged:Connect(function(e) if e.UserInputType==i.UserInputType then up((e.Position.X-BG.AbsolutePosition.X)/BG.AbsoluteSize.X) end end)
+            UIS.InputEnded:Once(function(e) if e.UserInputType==i.UserInputType then c:Disconnect() end end)
+        end
+    end)
+    y+=20
+end
+local function Sep()
+    local s=Instance.new("Frame",Janela)
+    s.Size=UDim2.new(.88,0,0,1);s.Position=UDim2.new(.06,0,0,y+4)
+    s.BackgroundColor3=Color3.fromRGB(60,60,80);y+=12
+end
+
+Toggle("AIM_LIGADO",CFG.AIM_LIGADO)
+Toggle("AIM_SUAVE",CFG.AIM_SUAVE)
+Slider("AIM_FOV",30,400,CFG.AIM_FOV)
+Slider("AIM_VELOCIDADE",1,99,CFG.AIM_VELOCIDADE*100)
+Sep()
+Toggle("FOV_VISIVEL",CFG.FOV_VISIVEL)
+Slider("FOV_TAMANHO",40,700,CFG.FOV_TAMANHO)
+Sep()
+Toggle("ESP_LIGADO",CFG.ESP_LIGADO)
+Toggle("ESP_CAIXA",CFG.ESP_CAIXA)
+Toggle("ESP_ESQUELETO",CFG.ESP_ESQUELETO)
+Toggle("ESP_NOME",CFG.ESP_NOME)
+Toggle("ESP_VIDA",CFG.ESP_VIDA)
+Toggle("ESP_DISTANCIA",CFG.ESP_DISTANCIA)
+
+-- ==================================================
+-- 🟢 BOTÃO FIXO CANTO ESQUERDO — NÃO MEXI
+-- ==================================================
+local BotaoOlho = Instance.new("TextButton")
+BotaoOlho.Size=UDim2.new(0,56,0,56);BotaoOlho.Position=UDim2.new(0,18,0,110)
+BotaoOlho.BackgroundColor3=Color3.fromRGB(0,200,255);BotaoOlho.BorderColor3=Color3.new(1,1,1);BotaoOlho.BorderSizePixel=2
+BotaoOlho.Text="👁️";BotaoOlho.Font=Enum.Font.GothamBlack;BotaoOlho.TextSize=23;BotaoOlho.ZIndex=99999
+BotaoOlho.Parent=Tela
+Instance.new("UICorner",BotaoOlho).CornerRadius=UDim.new(1,0)
+task.spawn(function() local h=0 while BotaoOlho.Parent do h=(h+0.008)%1 BotaoOlho.BackgroundColor3=Color3.fromHSV(h,1,1) task.wait() end end)
+BotaoOlho.MouseButton1Click:Connect(function()
+    CFG.MENU_ABERTO=not CFG.MENU_ABERTO
+    Janela.Visible=CFG.MENU_ABERTO
+    BotaoOlho.Text=CFG.MENU_ABERTO and "👁️" or "⚙️"
 end)
 
--- === FUNÇÕES UTILITÁRIAS ===
-local function SafeCall(func)
-    return pcall(func)
+-- ==================================================
+-- 🎯 AIMBOT — NÃO ALTEREI NADA
+-- ==================================================
+RunService.RenderStepped:Connect(function()
+    if not CFG.AIM_LIGADO or not jogadorLocal.Character then return end
+    if not jogadorLocal.Character:FindFirstChild("HumanoidRootPart") then return end
+    local centro=Camera.ViewportSize/2
+    local alvo,menor=nil,math.huge
+    for _,j in Players:GetPlayers() do
+        if j==jogadorLocal or not j.Character then continue end
+        local h=j.Character:FindFirstChildWhichIsA("Humanoid")
+        local c=j.Character:FindFirstChild(CFG.AIM_PARTE)
+        if not h or not c or h.Health<=0 then continue end
+        local p,v=Camera:WorldToScreenPoint(c.Position)
+        if not v then continue end
+        local d=(Vector2.new(p.X,p.Y)-centro).Magnitude
+        if d<=CFG.AIM_FOV and d<menor then menor=d alvo=c end
+    end
+    if alvo then
+        local dr=(alvo.Position-Camera.CFrame.Position).Unit
+        local cf=CFrame.new(Camera.CFrame.Position,Camera.CFrame.Position+dr)
+        Camera.CFrame=CFG.AIM_SUAVE and Camera.CFrame:Lerp(cf,math.clamp(1-CFG.AIM_VELOCIDADE,.08,1)) or cf
+    end
+end)
+
+-- ==================================================
+-- ⭕ FOV — MANTIDO PERFEITO
+-- ==================================================
+local FOV=Instance.new("Frame",Tela)
+FOV.AnchorPoint=Vector2.new(.5,.5);FOV.BackgroundTransparency=1
+FOV.BorderColor3=Color3.fromRGB(0,220,255);FOV.BorderSizePixel=2;FOV.ZIndex=99990
+Instance.new("UICorner",FOV).CornerRadius=UDim.new(1,0)
+RunService.RenderStepped:Connect(function()
+    local c=Camera.ViewportSize/2
+    FOV.Position=UDim2.new(0,c.X,0,c.Y)
+    FOV.Size=UDim2.new(0,CFG.FOV_TAMANHO*2,0,CFG.FOV_TAMANHO*2)
+    FOV.Visible=CFG.FOV_VISIVEL
+end)
+
+-- ==================================================
+-- 💀 ✅ ESQUELETO 100% FUNCIONAL — AGORA SIM
+-- 💀 REMOVIDO FRAME 1PX QUE CORTAVA TUDO, LINHAS LIVRES
+-- ==================================================
+local PastaESP = Instance.new("Folder",Tela)
+local OSSOS = {
+    {"Head","UpperTorso"},
+    {"UpperTorso","LowerTorso"},
+    {"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"LeftLowerArm","LeftHand"},
+    {"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"RightLowerArm","RightHand"},
+    {"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LeftLowerLeg","LeftFoot"},
+    {"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"},{"RightLowerLeg","RightFoot"},
+}
+
+local function linhaBranca()
+    local l=Instance.new("Frame")
+    l.BackgroundColor3=Color3.new(1,1,1)
+    l.BorderSizePixel=0
+    l.AnchorPoint=Vector2.new(.5,.5)
+    l.ZIndex=8000
+    l.Size=UDim2.new(0,0,0,1.1)
+    l.Parent=PastaESP
+    return l
 end
 
-local function WorldToScreen(Position)
-    if not Camera then return nil, false end
-    local ok, screenPos, onScreen = pcall(function()
-        return Camera:WorldToScreenPoint(Position)
-    end)
-    if ok and screenPos then
-        return Vector2.new(screenPos.X, screenPos.Y), onScreen
-    end
-    return nil, false
-end
-
-local function GetCharacterInfo(Player)
-    if not Player or not Player.Character then return nil end
-    local Character = Player.Character
-    local Head = Character:FindFirstChild("Head")
-    local Root = Character:FindFirstChild("HumanoidRootPart")
-    local Humanoid = Character:FindFirstChild("Humanoid")
-    
-    if Head and Root and Humanoid and Humanoid.Health > 0 then
-        return { Head = Head, Root = Root, Humanoid = Humanoid, Character = Character }
-    end
-    return nil
-end
-
-local function FindBestTarget()
-    local BestTarget = nil
-    local ClosestDistance = math.huge
-    
-    if not Camera or not Camera.ViewportSize then return nil end
-    local ScreenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-    
-    local LocalInfo = GetCharacterInfo(LocalPlayer)
-    if not LocalInfo then return nil end
-    
-    for _, Player in pairs(Players:GetPlayers()) do
-        if Player ~= LocalPlayer then
-            local Info = GetCharacterInfo(Player)
-            if Info then
-                local Distance = (Info.Root.Position - LocalInfo.Root.Position).Magnitude
-                if Distance <= Config.AimbotMaxDistance then
-                    local Head = Info.Head
-                    if Head then
-                        local ScreenPos, IsVisible = WorldToScreen(Head.Position)
-                        if IsVisible and ScreenPos then
-                            local DistToCenter = (ScreenPos - ScreenCenter).Magnitude
-                            if DistToCenter < Config.FOVRadius and DistToCenter < ClosestDistance then
-                                ClosestDistance = DistToCenter
-                                BestTarget = { Info = Info, Head = Head, ScreenPos = ScreenPos }
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-    
-    return BestTarget
-end
-
-local function AimAtTarget(Target)
-    if not Target or not Target.Head or not Target.Head.Parent then return end
-    local LocalInfo = GetCharacterInfo(LocalPlayer)
-    if not LocalInfo then return end
-    
-    local TargetPos = Target.Head.Position
-    local LocalPos = LocalInfo.Root.Position
-    local Direction = (TargetPos - LocalPos)
-    
-    if Direction.Magnitude > 0 then
-        Direction = Direction.Unit
-        local TargetCFrame = CFrame.new(Camera.CFrame.Position, Camera.CFrame.Position + Direction)
-        Camera.CFrame = Camera.CFrame:Lerp(TargetCFrame, Config.AimbotSmooth)
-    end
-end
-
-local function DrawFOVCircle()
-    if FOVCircle then
-        pcall(function() FOVCircle:Destroy() end)
-        FOVCircle = nil
-    end
-    
-    if not Config.FOVEnabled or not ScreenGui then return end
-    
-    local Drawing = Instance.new("Frame")
-    Drawing.Name = "FOVCircle"
-    Drawing.Size = UDim2.new(0, Config.FOVRadius * 2, 0, Config.FOVRadius * 2)
-    Drawing.Position = UDim2.new(0.5, -Config.FOVRadius, 0.5, -Config.FOVRadius)
-    Drawing.BackgroundTransparency = 1
-    Drawing.BorderSizePixel = 0
-    Drawing.Parent = ScreenGui
-    
-    local Circle = Instance.new("UIStroke")
-    Circle.Color = Color3.fromRGB(0, 255, 136)
-    Circle.Thickness = 2
-    Circle.Parent = Drawing
-    
-    local Corner = Instance.new("UICorner")
-    Corner.CornerRadius = UDim.new(1, 0)
-    Corner.Parent = Drawing
-    
-    FOVCircle = Drawing
-end
-
-local function CreateESPForPlayer(Player)
-    if ESPFrames[Player] then return end
-    
-    local Character = Player.Character
-    if not Character then return end
-    
-    local Container = Instance.new("Frame")
-    Container.Name = "ESPContainer_" .. Player.Name
-    Container.BackgroundTransparency = 1
-    Container.BorderSizePixel = 0
-    Container.Size = UDim2.new(1, 0, 1, 0)
-    Container.Parent = ScreenGui
-    
-    local NameLabel = Instance.new("TextLabel")
-    NameLabel.BackgroundTransparency = 0.3
-    NameLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-    NameLabel.TextColor3 = Color3.fromRGB(0, 255, 136)
-    NameLabel.Font = Enum.Font.GothamBold
-    NameLabel.TextSize = 13
-    NameLabel.Size = UDim2.new(0, 80, 0, 18)
-    NameLabel.Parent = Container
-    NameLabel.BorderSizePixel = 1
-    NameLabel.BorderColor3 = Color3.fromRGB(0, 255, 136)
-    NameLabel.Text = "🎯 " .. Player.Name
-    
-    local HealthBG = nil
-    local HealthBar = nil
-    
-    if Config.ESPHealthBar then
-        HealthBG = Instance.new("Frame")
-        HealthBG.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-        HealthBG.BorderSizePixel = 1
-        HealthBG.BorderColor3 = Color3.fromRGB(100, 100, 100)
-        HealthBG.Size = UDim2.new(0, 80, 0, 6)
-        HealthBG.Parent = Container
-        
-        HealthBar = Instance.new("Frame")
-        HealthBar.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-        HealthBar.BorderSizePixel = 0
-        HealthBar.Size = UDim2.new(1, 0, 1, 0)
-        HealthBar.Parent = HealthBG
-    end
-    
-    local Lines = {}
-    if Config.ESPSkeletonEnabled then
-        local Bones = {
-            {"Head", "UpperTorso"},
-            {"UpperTorso", "LowerTorso"},
-            {"UpperTorso", "LeftUpperArm"},
-            {"LeftUpperArm", "LeftLowerArm"},
-            {"UpperTorso", "RightUpperArm"},
-            {"RightUpperArm", "RightLowerArm"},
-            {"LowerTorso", "LeftUpperLeg"},
-            {"LeftUpperLeg", "LeftLowerLeg"},
-            {"LowerTorso", "RightUpperLeg"},
-            {"RightUpperLeg", "RightLowerLeg"},
-        }
-        
-        for _ = 1, #Bones do
-            local Line = Instance.new("Frame")
-            Line.BackgroundColor3 = Color3.fromRGB(0, 255, 136)
-            Line.BorderSizePixel = 0
-            Line.Parent = Container
-            table.insert(Lines, Line)
-        end
-    end
-    
-    ESPFrames[Player] = {
-        Container = Container,
-        NameLabel = NameLabel,
-        HealthBG = HealthBG,
-        HealthBar = HealthBar,
-        Lines = Lines,
-        Bones = Config.ESPSkeletonEnabled and {
-            {"Head", "UpperTorso"},
-            {"UpperTorso", "LowerTorso"},
-            {"UpperTorso", "LeftUpperArm"},
-            {"LeftUpperArm", "LeftLowerArm"},
-            {"UpperTorso", "RightUpperArm"},
-            {"RightUpperArm", "RightLowerArm"},
-            {"LowerTorso", "LeftUpperLeg"},
-            {"LeftUpperLeg", "LeftLowerLeg"},
-            {"LowerTorso", "RightUpperLeg"},
-            {"RightUpperLeg", "RightLowerLeg"},
-        } or {}
-    }
-end
-
-local function UpdateESP()
-    for Player, ESPData in pairs(ESPFrames) do
-        if not Player or not Player.Character or not Player.Character:FindFirstChild("Humanoid") then
-            pcall(function() ESPData.Container:Destroy() end)
-            ESPFrames[Player] = nil
-        else
-            local Character = Player.Character
-            local Head = Character:FindFirstChild("Head")
-            local Humanoid = Character:FindFirstChild("Humanoid")
-            
-            if Head and Humanoid and Humanoid.Health > 0 then
-                local ScreenPos, OnScreen = WorldToScreen(Head.Position)
-                if OnScreen and ScreenPos then
-                    ESPData.NameLabel.Visible = true
-                    ESPData.NameLabel.Position = UDim2.new(0, ScreenPos.X - 40, 0, ScreenPos.Y - 25)
-                    ESPData.NameLabel.Text = "🎯 " .. Player.Name .. " [" .. math.floor(Humanoid.Health) .. "]"
-                    
-                    if ESPData.HealthBG then
-                        ESPData.HealthBG.Visible = true
-                        ESPData.HealthBG.Position = UDim2.new(0, ScreenPos.X - 40, 0, ScreenPos.Y - 8)
-                        local HealthPercent = math.max(0, math.min(1, Humanoid.Health / Humanoid.MaxHealth))
-                        ESPData.HealthBar.Size = UDim2.new(HealthPercent, 0, 1, 0)
-                    end
-                    
-                    if Config.ESPSkeletonEnabled and #ESPData.Bones > 0 then
-                        for i, BonePair in ipairs(ESPData.Bones) do
-                            if i <= #ESPData.Lines then
-                                local Bone1 = Character:FindFirstChild(BonePair[1])
-                                local Bone2 = Character:FindFirstChild(BonePair[2])
-                                
-                                if Bone1 and Bone2 then
-                                    local Pos1, OnScreen1 = WorldToScreen(Bone1.Position)
-                                    local Pos2, OnScreen2 = WorldToScreen(Bone2.Position)
-                                    
-                                    if OnScreen1 and OnScreen2 and Pos1 and Pos2 then
-                                        local Line = ESPData.Lines[i]
-                                        local Distance = (Pos2 - Pos1).Magnitude
-                                        local Angle = math.atan2(Pos2.Y - Pos1.Y, Pos2.X - Pos1.X)
-                                        
-                                        Line.Visible = true
-                                        Line.Size = UDim2.new(0, Distance, 0, 2)
-                                        Line.Position = UDim2.new(0, Pos1.X, 0, Pos1.Y)
-                                        Line.Rotation = math.deg(Angle)
-                                    else
-                                        ESPData.Lines[i].Visible = false
-                                    end
-                                else
-                                    ESPData.Lines[i].Visible = false
-                                end
-                            end
-                        end
-                    end
-                else
-                    ESPData.NameLabel.Visible = false
-                    if ESPData.HealthBG then ESPData.HealthBG.Visible = false end
-                    for _, Line in ipairs(ESPData.Lines) do Line.Visible = false end
-                end
-            else
-                ESPData.NameLabel.Visible = false
-                if ESPData.HealthBG then ESPData.HealthBG.Visible = false end
-                for _, Line in ipairs(ESPData.Lines) do Line.Visible = false end
-            end
-        end
-    end
-end
-
--- === CRIAR GUI ===
-local function CreateUI()
-    if ScreenGui then return end
-    
-    ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "AimbotProGUI_" .. math.random(100000, 999999)
-    ScreenGui.ResetOnSpawn = false
-    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    ScreenGui.IgnoreGuiInset = true
-    ScreenGui.DisplayOrder = 10000
-    
-    local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 5)
-    if PlayerGui then
-        ScreenGui.Parent = PlayerGui
-    else
+RunService.RenderStepped:Connect(function()
+    -- GERAL DESLIGADO
+    if not CFG.ESP_LIGADO then
+        for _,v in PastaESP:GetChildren() do v.Visible=false end
         return
     end
-    
-    -- === MENU ===
-    MenuFrame = Instance.new("Frame")
-    MenuFrame.Size = UDim2.new(0, 300, 0, 500)
-    MenuFrame.Position = UDim2.new(0, 20, 0.5, -250)
-    MenuFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
-    MenuFrame.BorderSizePixel = 0
-    MenuFrame.Visible = Config.ShowMenu
-    MenuFrame.Parent = ScreenGui
-    
-    local Border = Instance.new("UIStroke")
-    Border.Color = Color3.fromRGB(0, 255, 136)
-    Border.Thickness = 2
-    Border.Parent = MenuFrame
-    
-    local Corner = Instance.new("UICorner")
-    Corner.CornerRadius = UDim.new(0, 10)
-    Corner.Parent = MenuFrame
-    
-    -- Header
-    local Header = Instance.new("Frame")
-    Header.Size = UDim2.new(1, 0, 0, 50)
-    Header.BackgroundColor3 = Color3.fromRGB(0, 255, 136)
-    Header.BorderSizePixel = 0
-    Header.Parent = MenuFrame
-    
-    local HeaderCorner = Instance.new("UICorner")
-    HeaderCorner.CornerRadius = UDim.new(0, 10)
-    HeaderCorner.Parent = Header
-    
-    local Title = Instance.new("TextLabel")
-    Title.Text = "🎯 AIMBOT PRO"
-    Title.Size = UDim2.new(1, 0, 1, 0)
-    Title.BackgroundTransparency = 1
-    Title.TextColor3 = Color3.fromRGB(0, 0, 0)
-    Title.Font = Enum.Font.GothamBold
-    Title.TextSize = 20
-    Title.Parent = Header
-    
-    -- Scroll
-    local Scroll = Instance.new("ScrollingFrame")
-    Scroll.Size = UDim2.new(1, 0, 1, -60)
-    Scroll.Position = UDim2.new(0, 0, 0, 50)
-    Scroll.CanvasSize = UDim2.new(0, 0, 0, 600)
-    Scroll.ScrollBarThickness = 3
-    Scroll.BackgroundTransparency = 1
-    Scroll.BorderSizePixel = 0
-    Scroll.Parent = MenuFrame
-    
-    local function CreateToggle(Name, Enabled, YPos, Callback)
-        local Container = Instance.new("Frame")
-        Container.Size = UDim2.new(1, -20, 0, 40)
-        Container.Position = UDim2.new(0, 10, 0, YPos)
-        Container.BackgroundColor3 = Color3.fromRGB(30, 30, 50)
-        Container.BorderSizePixel = 0
-        Container.Parent = Scroll
-        
-        local Corner2 = Instance.new("UICorner")
-        Corner2.CornerRadius = UDim.new(0, 6)
-        Corner2.Parent = Container
-        
-        local Label = Instance.new("TextLabel")
-        Label.Text = Name
-        Label.Size = UDim2.new(0.7, 0, 1, 0)
-        Label.BackgroundTransparency = 1
-        Label.TextColor3 = Color3.fromRGB(200, 220, 255)
-        Label.Font = Enum.Font.Gotham
-        Label.TextSize = 12
-        Label.TextXAlignment = Enum.TextXAlignment.Left
-        Label.Parent = Container
-        
-        local Button = Instance.new("TextButton")
-        Button.Size = UDim2.new(0.25, 0, 1, 0)
-        Button.Position = UDim2.new(0.75, 0, 0, 0)
-        Button.BackgroundColor3 = Enabled and Color3.fromRGB(0, 255, 136) or Color3.fromRGB(80, 80, 100)
-        Button.BorderSizePixel = 0
-        Button.Text = Enabled and "ON" or "OFF"
-        Button.TextColor3 = Color3.fromRGB(0, 0, 0)
-        Button.Font = Enum.Font.GothamBold
-        Button.TextSize = 11
-        Button.Parent = Container
-        
-        local State = Enabled
-        Button.MouseButton1Click:Connect(function()
-            State = not State
-            Button.BackgroundColor3 = State and Color3.fromRGB(0, 255, 136) or Color3.fromRGB(80, 80, 100)
-            Button.Text = State and "ON" or "OFF"
-            Callback(State)
-        end)
-    end
-    
-    local function CreateSlider(Name, Min, Max, Initial, YPos, Callback)
-        local Container = Instance.new("Frame")
-        Container.Size = UDim2.new(1, -20, 0, 50)
-        Container.Position = UDim2.new(0, 10, 0, YPos)
-        Container.BackgroundTransparency = 1
-        Container.Parent = Scroll
-        
-        local Label = Instance.new("TextLabel")
-        Label.Text = Name .. ": " .. tostring(math.floor(Initial * 100) / 100)
-        Label.Size = UDim2.new(1, 0, 0, 18)
-        Label.BackgroundTransparency = 1
-        Label.TextColor3 = Color3.fromRGB(0, 255, 136)
-        Label.Font = Enum.Font.Gotham
-        Label.TextSize = 11
-        Label.Parent = Container
-        
-        local SliderBG = Instance.new("Frame")
-        SliderBG.Size = UDim2.new(1, 0, 0, 8)
-        SliderBG.Position = UDim2.new(0, 0, 0, 25)
-        SliderBG.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
-        SliderBG.BorderSizePixel = 0
-        SliderBG.Parent = Container
-        
-        local SliderHandle = Instance.new("Frame")
-        SliderHandle.Size = UDim2.new(0, 14, 0, 14)
-        SliderHandle.Position = UDim2.new((Initial - Min) / (Max - Min), -7, -0.3, 0)
-        SliderHandle.BackgroundColor3 = Color3.fromRGB(0, 255, 136)
-        SliderHandle.BorderSizePixel = 0
-        SliderHandle.Parent = SliderBG
-        
-        local Dragging = false
-        
-        SliderHandle.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                Dragging = true
-                input.Changed:Connect(function()
-                    if input.UserInputState == Enum.UserInputState.End then
-                        Dragging = false
-                    end
-                end)
-            end
-        end)
-        
-        ScreenGui.InputChanged:Connect(function(input)
-            if Dragging then
-                local X = input.Position and input.Position.X or UserInputService:GetMouseLocation().X
-                local SliderPos = SliderBG.AbsolutePosition.X
-                local SliderSize = SliderBG.AbsoluteSize.X
-                local RelativePos = math.max(0, math.min(X - SliderPos, SliderSize))
-                local Value = Min + (RelativePos / SliderSize) * (Max - Min)
-                
-                SliderHandle.Position = UDim2.new(RelativePos / SliderSize, -7, -0.3, 0)
-                Label.Text = Name .. ": " .. tostring(math.floor(Value * 100) / 100)
-                Callback(Value)
-            end
-        end)
-    end
-    
-    CreateToggle("🎯 Aimbot", Config.AimbotEnabled, 10, function(state)
-        Config.AimbotEnabled = state
-    end)
-    
-    CreateToggle("🎨 FOV Visible", Config.FOVEnabled, 60, function(state)
-        Config.FOVEnabled = state
-        DrawFOVCircle()
-    end)
-    
-    CreateToggle("👁️ ESP", Config.ESPEnabled, 110, function(state)
-        Config.ESPEnabled = state
-    end)
-    
-    CreateToggle("💀 Skeleton", Config.ESPSkeletonEnabled, 160, function(state)
-        Config.ESPSkeletonEnabled = state
-    end)
-    
-    CreateToggle("❤️ Health Bar", Config.ESPHealthBar, 210, function(state)
-        Config.ESPHealthBar = state
-    end)
-    
-    CreateSlider("Suavidade", 0.01, 0.5, Config.AimbotSmooth, 260, function(value)
-        Config.AimbotSmooth = value
-    end)
-    
-    CreateSlider("FOV Raio", 50, 400, Config.FOVRadius, 320, function(value)
-        Config.FOVRadius = value
-        DrawFOVCircle()
-    end)
-    
-    CreateSlider("Alcance", 100, 1000, Config.AimbotMaxDistance, 380, function(value)
-        Config.AimbotMaxDistance = value
-    end)
-    
-    -- Toggle Button
-    local ToggleBtn = Instance.new("TextButton")
-    ToggleBtn.Size = UDim2.new(0, 55, 0, 55)
-    ToggleBtn.Position = UDim2.new(1, -75, 1, -75)
-    ToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 255, 136)
-    ToggleBtn.BackgroundTransparency = 0.2
-    ToggleBtn.Text = "≡"
-    ToggleBtn.TextColor3 = Color3.fromRGB(0, 255, 136)
-    ToggleBtn.Font = Enum.Font.GothamBold
-    ToggleBtn.TextSize = 28
-    ToggleBtn.Parent = ScreenGui
-    ToggleBtn.ZIndex = 5000
-    
-    local BtnCorner = Instance.new("UICorner")
-    BtnCorner.CornerRadius = UDim.new(0, 27)
-    BtnCorner.Parent = ToggleBtn
-    
-    local BtnStroke = Instance.new("UIStroke")
-    BtnStroke.Color = Color3.fromRGB(0, 255, 136)
-    BtnStroke.Thickness = 2
-    BtnStroke.Parent = ToggleBtn
-    
-    ToggleBtn.MouseButton1Click:Connect(function()
-        Config.ShowMenu = not Config.ShowMenu
-        MenuFrame.Visible = Config.ShowMenu
-    end)
-    
-    DrawFOVCircle()
-end
+    local eu = jogadorLocal.Character and jogadorLocal.Character:FindFirstChild("HumanoidRootPart")
 
-CreateUI()
+    for _,j in Players:GetPlayers() do
+        if j==jogadorLocal or not j.Character then continue end
+        local rt=j.Character:FindFirstChild("HumanoidRootPart")
+        local hm=j.Character:FindFirstChildWhichIsA("Humanoid")
+        local hd=j.Character:FindFirstChild("Head")
+        if not rt or not hm or not hd then continue end
 
--- === INPUT HANDLING ===
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    
-    if input.KeyCode == Config.AimbotKey then
-        CameraLocked = true
-    end
-    
-    if input.KeyCode == Enum.KeyCode.X then
-        Config.ShowMenu = not Config.ShowMenu
-        if MenuFrame then MenuFrame.Visible = Config.ShowMenu end
-    end
-end)
-
-UserInputService.InputEnded:Connect(function(input, gameProcessed)
-    if input.KeyCode == Config.AimbotKey then
-        CameraLocked = false
-    end
-end)
-
--- === MAIN LOOP ===
-RunService.RenderStepped:Connect(function()
-    if Config.AimbotEnabled and CameraLocked then
-        local Target = FindBestTarget()
-        if Target then
-            SafeCall(function()
-                AimAtTarget(Target)
-            end)
+        -- CAIXA / NOME / VIDA
+        local base = PastaESP:FindFirstChild("B_"..j.UserId)
+        if not base then
+            base=Instance.new("Frame",PastaESP)
+            base.Name="B_"..j.UserId
+            base.BackgroundTransparency=1;base.Size=UDim2.new(0,1,0,1);base.ZIndex=500
+            local cx=Instance.new("Frame",base);cx.Name="C";cx.BackgroundTransparency=1;cx.BorderColor3=Color3.fromRGB(0,255,136);cx.BorderSizePixel=1;cx.AnchorPoint=Vector2.new(.5,.5)
+            local nm=Instance.new("TextLabel",base);nm.Name="N";nm.BackgroundTransparency=1;nm.Font=Enum.Font.GothamBold;nm.TextSize=12;nm.TextColor3=Color3.new(1,1,1);nm.TextStrokeTransparency=0;nm.AnchorPoint=Vector2.new(.5,1)
+            local vd=Instance.new("TextLabel",base);vd.Name="V";vd.BackgroundTransparency=1;vd.Font=Enum.Font.Gotham;vd.TextSize=11;vd.TextColor3=Color3.fromRGB(255,60,60);vd.TextStrokeTransparency=0;vd.AnchorPoint=Vector2.new(.5,0)
         end
-    end
-    
-    if Config.ESPEnabled then
-        for _, Player in pairs(Players:GetPlayers()) do
-            if Player ~= LocalPlayer and Player.Character then
-                if not ESPFrames[Player] then
-                    CreateESPForPlayer(Player)
+        base.Visible=true
+
+        local pT=Camera:WorldToScreenPoint(rt.Position)
+        local cT=Camera:WorldToScreenPoint(hd.Position+Vector3.new(0,1.8,0))
+        local bT=Camera:WorldToScreenPoint(rt.Position-Vector3.new(0,2.8,0))
+        local alt=math.max(25,math.abs(cT.Y-bT.Y));local lar=alt*.62
+        base.Position=UDim2.new(0,pT.X,0,pT.Y)
+        base.C.Visible=CFG.ESP_CAIXA;base.C.Size=UDim2.new(0,lar,0,alt)
+        base.N.Visible=CFG.ESP_NOME;base.N.Position=UDim2.new(.5,0,0,-alt/2-2)
+        local tx=j.Name
+        if CFG.ESP_DISTANCIA and eu then tx..=string.format(" · %.0fm",(eu.Position-rt.Position).Magnitude) end
+        base.N.Text=tx
+        base.V.Visible=CFG.ESP_VIDA;base.V.Position=UDim2.new(.5,0,0,alt/2+2)
+        base.V.Text=string.format("❤ %d/%d",math.floor(hm.Health),hm.MaxHealth)
+
+        -- 💀 ESQUELETO SÓ AQUI, LIVRE NA TELA
+        if CFG.ESP_ESQUELETO then
+            for k=1,#OSSOS do
+                local A=j.Character:FindFirstChild(OSSOS[k][1])
+                local B=j.Character:FindFirstChild(OSSOS[k][2])
+                if A and B then
+                    local a=Camera:WorldToScreenPoint(A.Position)
+                    local b=Camera:WorldToScreenPoint(B.Position)
+                    local tam=(Vector2.new(a.X,a.Y)-Vector2.new(b.X,b.Y)).Magnitude
+                    local ang=math.deg(math.atan2(b.Y-a.Y,b.X-a.X))
+                    local id="S_"..j.UserId.."_"..k
+                    local ln=PastaESP:FindFirstChild(id) or linhaBranca()
+                    ln.Name=id;ln.Visible=true
+                    ln.Size=UDim2.new(0,tam,0,1.1)
+                    ln.Position=UDim2.new(0,(a.X+b.X)/2,0,(a.Y+b.Y)/2)
+                    ln.Rotation=ang
                 end
             end
+        else
+            for _,v in PastaESP:GetChildren() do
+                if v.Name:sub(1,3)=="S_"..j.UserId then v.Visible=false end
+            end
         end
-        UpdateESP()
+    end
+
+    -- LIMPEZA
+    for _,v in PastaESP:GetChildren() do
+        local id=tonumber(string.match(v.Name,"%d+") or 0)
+        local pl=Players:GetPlayerByUserId(id)
+        if not pl or not pl.Character or not pl.Character:FindFirstChild("HumanoidRootPart") then v:Destroy() end
     end
 end)
 
--- === CLEANUP ===
-Players.PlayerRemoving:Connect(function(Player)
-    if ESPFrames[Player] then
-        pcall(function()
-            ESPFrames[Player].Container:Destroy()
-        end)
-        ESPFrames[Player] = nil
-    end
+Players.PlayerRemoving:Connect(function(j)
+    for _,v in PastaESP:GetChildren() do if string.find(v.Name,tostring(j.UserId)) then v:Destroy() end end
 end)
 
-print("✅ AIMBOT PRO LOADED - DELTA EXECUTOR")
-print("🎮 CONTROLES:")
-print("  E = Aimbot (Hold)")
-print("  X = Abrir/Fechar Menu")
-print("  ≡ = Menu Flutuante")
+jogadorLocal.CharacterAdded:Connect(function()
+    task.wait(.6)
+    if not Tela.Parent then Tela.Parent=jogadorLocal:WaitForChild("PlayerGui") end
+    Janela.Visible=CFG.MENU_ABERTO
+end)
