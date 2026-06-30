@@ -1,24 +1,24 @@
 --[[
-    Script Completo para Arena de Pistolas (Roblox)
-    GUI Interativa: Teleporte, Aimbot Instantâneo na Cabeça, ESP Detalhado, FOV Ajustável.
-    Requer funções de desenho externas (Draw.*, worldToScreen).
+    Script LUA/LUAU para Roblox Mobile (Delta Executor)
+    Aimbot com Wallhack e GUI Mobile-Friendly.
+    AVISO: Wallhacks são detectáveis e podem levar a banimentos. Use por sua conta e risco.
+    Requer funções de acesso à câmera e de desenho.
 ]]
 
 -- === MÓDULOS ESSENCIAIS ===
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
-local HttpService = game:GetService("HttpService")
 local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService") -- Adicionado para animações suaves
 
--- === FUNÇÕES DE DESENHO (NECESSÁRIAS DO SEU FRAMEWORK/EXPLORE) ===
+-- === FUNÇÕES NECESSÁRIAS DO SEU EXPLORE/FRAMEWORK ===
+-- VOCÊ PRECISA GARANTIR QUE ESTAS FUNCIONAM NO SEU EXECUTOR DELTA!
 local Draw = {
     Line = function(startPos, endPos, thickness, color) print("Draw.Line", startPos, endPos, thickness, color) end,
-    Box = function(pos, size, thickness, color) print("Draw.Box", pos, size, thickness, color) end,
-    Text = function(text, font, size, pos, color, outline) print("Draw.Text", text, font, size, pos, color, outline) end,
+    Box = function(position, size, thickness, color) print("Draw.Box", position, size, thickness, color) end,
+    Text = function(text, font, size, position, color, outline) print("Draw.Text", text, font, size, color, outline) end,
     Skeleton = function(bones, thickness, color) print("Draw.Skeleton", bones, thickness, color) end,
-    Model = function(model, cframe, scale) print("Draw.Model", model, cframe, scale) end,
 }
 
 local function worldToScreen(position)
@@ -32,98 +32,129 @@ local function worldToScreen(position)
     return nil
 end
 
-local function HSVtoRGB(h, s, v)
-    local r, g, b = v, v, v
-    if s > 0 then
-        local hue = h * 6
-        local i = math.floor(hue)
-        local f = hue - i
-        local p = v * (1 - s)
-        local q = v * (1 - f * s)
-        local t = v * (1 - (1 - f) * s)
-        if i == 0 then r, g, b = v, t, p
-        elseif i == 1 then r, g, b = q, v, p
-        elseif i == 2 then r, g, b = p, v, t
-        elseif i == 3 then r, g, b = t, q, v
-        elseif i == 4 then r, g, b = v, p, q
-        elseif i == 5 then r, g, b = f, p, v
-        end
-    end
-    return Color3.new(r, g, b)
-end
+-- === CONFIGURAÇÕES DO AIMBOT ===
+local AimbotConfig = {
+    Enabled = false,
+    InstantAim = true,
 
--- === CONFIGURAÇÕES DO SCRIPT ===
-local Settings = {
-    -- Aimbot
-    AimbotEnabled = false,
-    AimbotSmoothness = 1,       -- <<< INSTANTÂNEO
-    AimbotFOV = 15,
-    AimbotTarget = "Head",      -- "Head", "Chest", "Legs", "Root"
-    AimbotDrawCrosshair = true,
-    AimbotDrawFovCircle = true,
+    AimKey = Enum.KeyCode.Button1, -- Botão do mouse 1 (clique esquerdo) para ativar
+    AimKeyMode = "Hold", -- "Hold" ou "Toggle"
 
-    -- ESP
-    ESPEnabled = false,
-    ESPBox = true,
-    ESPSkeleton = true,
-    ESPName = true,
-    ESPDistance = true,
-    ESPHealth = true,
-    ESPTeamCheck = true,
-    ESPMaxDistance = 200,
+    FOV = 25,
+    TargetType = "Head",
+    MaxDistance = 400,
 
-    -- Teleporte
-    TeleportEnabled = false, -- Desativado por padrão, ativado pela GUI
-    TeleportPrefix = "!",
-    TeleportCommand = "tp",
-    DefaultY = 100, -- Y padrão para teleporte simples
-
-    -- Menu
-    MenuEnabled = true,
-    MenuShow = true,
-    MenuX = 50,
-    MenuY = 50,
-    MenuWidth = 400,
-    MenuHeight = 700,
+    DrawFOV = true,
+    DrawCrosshair = true,
+    DrawTargetInfo = true,
 
     -- Cores
-    ColorSettings = {
-        BoxColor = Color3.fromRGB(255, 100, 100),
-        SkeletonColor = Color3.fromRGB(100, 255, 100),
-        NameColor = Color3.fromRGB(255, 255, 255),
-        HealthBarColor = Color3.fromRGB(0, 255, 0),
-        HeadDotColor = Color3.fromRGB(255, 255, 0),
-        FovCircleColor = Color3.fromRGB(200, 200, 200),
-        UseRealisticRGB = false,
-        RGBHue = 0,
-        RGBSaturation = 1,
-        RGBValue = 1,
-    },
+    FOVColor = Color3.fromRGB(200, 200, 200),
+    CrosshairColor = Color3.fromRGB(255, 255, 255),
+    TargetInfoColor = Color3.fromRGB(255, 255, 0),
 }
 
--- === ESTADO DA UI ===
+-- === CONFIGURAÇÕES DA GUI (MOBILE-FRIENDLY) ===
+local GUIConfig = {
+    MenuEnabled = true,
+    MenuShow = true,
+    MenuX = 10,
+    MenuY = 100,
+    MenuWidth = 380, -- Largura um pouco maior para mobile
+    MenuHeight = 600, -- Altura maior para mais opções
+
+    ButtonX = 10, -- Posição do botão de abrir/fechar menu
+    ButtonY = 10,
+    ButtonSize = UDim2.new(0, 120, 0, 40),
+}
+
+-- === REFERÊNCIAS ===
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+local GuiService = LocalPlayer:WaitForChild("PlayerGui")
+
+-- === ESTADO DO AIMBOT ===
+local IsAimKeyPressed = false
+local AimToggleState = false
+local CurrentTarget = nil
+local CurrentTargetScreenPos = nil
 local IsDraggingMenu = false
 local DragOffset = Vector2.new(0, 0)
 
--- === REFERÊNCIAS ===
-local LocalPlayer = Players.LocalPlayer
-local GuiService = LocalPlayer:WaitForChild("PlayerGui")
-local Workspace = game:GetService("Workspace")
-local TextChatService = game:GetService("TextChatService") -- Para comandos de chat
-
--- === CRIAÇÃO DA UI PRINCIPAL ===
+-- === CRIAÇÃO DA GUI (MOBILE) ===
 local mainGui = Instance.new("ScreenGui")
-mainGui.Name = "ArenaPistolas_GUI_Full"
+mainGui.Name = "MobileAimbot_GUI"
 mainGui.Enabled = true
 mainGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 mainGui.ResetOnSpawn = false
 mainGui.Parent = GuiService
 
-local menuFrame = Instance.new("Frame") -- Será criado e retornado por createMenuUI
+-- Botão para Abrir/Fechar o Menu Principal
+local menuToggleButton = Instance.new("TextButton")
+menuToggleButton.Name = "MenuToggleButton"
+menuToggleButton.Size = GUIConfig.ButtonSize
+menuToggleButton.Position = UDim2.new(0, GUIConfig.ButtonX, 0, GUIConfig.ButtonY)
+menuToggleButton.BackgroundColor3 = Color3.fromRGB(50, 50, 200)
+menuToggleButton.Text = "Abrir Menu"
+menuToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+menuToggleButton.Font = Enum.Font.SourceSansBold
+menuToggleButton.TextScaled = true
+menuToggleButton.Parent = mainGui
+menuToggleButton.MouseButton1Click:Connect(function()
+    GUIConfig.MenuShow = not GUIConfig.MenuShow
+    if menuFrame then menuFrame.Visible = GUIConfig.MenuShow end
+    menuToggleButton.Text = GUIConfig.MenuShow and "Fechar Menu" or "Abrir Menu"
+end)
 
--- === FUNÇÕES AUXILIARES DA UI ===
--- (Estas são as mesmas funções de UI do script anterior: createSection, createRGBControls, etc.)
--- Incluí-las aqui para que o script seja auto-contido.
+-- Frame Principal do Menu
+local menuFrame = Instance.new("Frame")
+menuFrame.Name = "MobileAimbot_MenuFrame"
+menuFrame.Size = UDim2.new(0, GUIConfig.MenuWidth, 0, GUIConfig.MenuHeight)
+menuFrame.Position = UDim2.new(0, GUIConfig.MenuX, 0, GUIConfig.MenuY)
+menuFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+menuFrame.BorderColor3 = Color3.fromRGB(40, 40, 40)
+menuFrame.BorderSizePixel = 2
+menuFrame.Visible = GUIConfig.MenuShow
+menuFrame.Parent = mainGui
+
+-- Barra de Título para arrastar
+local titleBar = Instance.new("Frame")
+titleBar.Name = "TitleBar"
+titleBar.Size = UDim2.new(1, 0, 0, 30)
+titleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+titleBar.BorderColor3 = Color3.fromRGB(50, 50, 50)
+titleBar.BorderSizePixel = 1
+titleBar.Parent = menuFrame
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Text = "Wallhack Aimbot"
+titleLabel.Size = UDim2.new(1, 0, 1, 0)
+titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+titleLabel.Font = Enum.Font.SourceSansBold
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.TextYAlignment = Enum.TextYAlignment.Center
+titleLabel.TextScaled = true
+titleLabel.BackgroundTransparency = 1
+titleLabel.PaddingLeft = UDim.new(0, 10)
+titleLabel.Parent = titleBar
+titleBar.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then IsDraggingMenu = true; DragOffset = input.Position - menuFrame.AbsolutePosition end end)
+titleBar.InputEnded:Connect(function() IsDraggingMenu = false end)
+
+-- Scrolling Frame para o conteúdo
+local scrollFrame = Instance.new("ScrollingFrame")
+scrollFrame.Name = "ScrollFrame"
+scrollFrame.Size = UDim2.new(1, 0, 1, -40)
+scrollFrame.Position = UDim2.new(0, 0, 0, 30)
+scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 600) -- Ajuste conforme necessário
+scrollFrame.ScrollBarThickness = 6
+scrollFrame.BackgroundTransparency = 1
+scrollFrame.Parent = menuFrame
+
+-- ==================================================
+-- == REUTILIZANDO FUNÇÕES AUXILIARES DE GUI (Mobile) ==
+-- ==================================================
 
 local function createSection(parent, title, yPos, height)
     local section = Instance.new("Frame")
@@ -146,100 +177,9 @@ local function createSection(parent, title, yPos, height)
     return section
 end
 
-local function createRGBControls(parent, position)
-    local frame = Instance.new("Frame")
-    frame.Name = "RGBControls"
-    frame.Size = UDim2.new(1, 0, 0, 70)
-    frame.Position = position
-    frame.BackgroundTransparency = 1
-    frame.Parent = parent
-    createSlider(frame, "Hue", 0, 1, Settings.ColorSettings.RGBHue, UDim2.new(0, 0, 0, 0), function(value) Settings.ColorSettings.RGBHue = value end)
-    createSlider(frame, "Sat", 0, 1, Settings.ColorSettings.RGBSaturation, UDim2.new(0, 0, 0, 35), function(value) Settings.ColorSettings.RGBSaturation = value end)
-    createSlider(frame, "Val", 0, 1, Settings.ColorSettings.RGBValue, UDim2.new(0, 0, 0, 70), function(value) Settings.ColorSettings.RGBValue = value end)
-    return frame
-end
-
-local function createColorPickerButton(parent, label, initialColor, position, callback)
-    local container = Instance.new("Frame")
-    container.Size = UDim2.new(0.5, -5, 0, 30)
-    container.Position = position
-    container.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    container.BorderColor3 = Color3.fromRGB(50, 50, 50)
-    container.BorderSizePixel = 1
-    container.Parent = parent
-    local labelText = Instance.new("TextLabel")
-    labelText.Text = label
-    labelText.Size = UDim2.new(0.6, 0, 1, 0)
-    labelText.Position = UDim2.new(0, 5, 0, 0)
-    labelText.TextColor3 = Color3.fromRGB(220, 220, 220)
-    labelText.Font = Enum.Font.SourceSans
-    labelText.TextXAlignment = Enum.TextXAlignment.Left
-    labelText.TextYAlignment = Enum.TextYAlignment.Center
-    labelText.BackgroundTransparency = 1
-    labelText.Parent = labelText
-    local colorPreview = Instance.new("Frame")
-    colorPreview.Name = "ColorPreview"
-    colorPreview.Size = UDim2.new(0.4, 0, 1, 0)
-    colorPreview.Position = UDim2.new(0.6, 0, 0, 0)
-    colorPreview.BackgroundColor3 = initialColor
-    colorPreview.Parent = container
-    colorPreview.MouseButton1Click:Connect(function()
-        local presetColors = { Color3.fromRGB(255, 100, 100), Color3.fromRGB(100, 255, 100), Color3.fromRGB(100, 100, 255), Color3.fromRGB(255, 255, 100), Color3.fromRGB(255, 100, 255), Color3.fromRGB(100, 255, 255), Color3.fromRGB(255, 165, 0), Color3.fromRGB(128, 0, 128), Color3.fromRGB(0, 255, 255) }
-        local foundIndex = -1
-        for i, c in ipairs(presetColors) do if c == initialColor then foundIndex = i; break end end
-        local nextColor = foundIndex ~= -1 and foundIndex < #presetColors and presetColors[foundIndex + 1] or presetColors[1]
-        colorPreview.BackgroundColor3 = nextColor
-        initialColor = nextColor
-        callback(nextColor)
-    end)
-    return container
-end
-
-local function createSlider(parent, label, minVal, maxVal, initialVal, position, callback)
-    local container = Instance.new("Frame")
-    container.Size = UDim2.new(1, -10, 0, 30)
-    container.Position = position
-    container.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    container.BorderColor3 = Color3.fromRGB(50, 50, 50)
-    container.BorderSizePixel = 1
-    container.Parent = parent
-    local labelText = Instance.new("TextLabel")
-    labelText.Text = label .. ": " .. string.format("%.2f", initialVal)
-    labelText.Size = UDim2.new(0.3, 0, 1, 0)
-    labelText.Position = UDim2.new(0, 5, 0, 0)
-    labelText.TextColor3 = Color3.fromRGB(220, 220, 220)
-    labelText.Font = Enum.Font.SourceSans
-    labelText.TextXAlignment = Enum.TextXAlignment.Left
-    labelText.TextYAlignment = Enum.TextYAlignment.Center
-    labelText.BackgroundTransparency = 1
-    labelText.Parent = labelText
-    local sliderBar = Instance.new("Frame")
-    sliderBar.Name = "SliderBar"
-    sliderBar.Size = UDim2.new(0.7, -10, 0, 10)
-    sliderBar.Position = UDim2.new(0.3, 5, 0, 10)
-    sliderBar.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
-    sliderBar.BackgroundTransparency = 0.3
-    sliderBar.Parent = container
-    local sliderHandle = Instance.new("Frame")
-    sliderHandle.Name = "SliderHandle"
-    sliderHandle.Size = UDim2.new(0, 15, 1, 0)
-    local initialHandlePos = (initialVal - minVal) / (maxVal - minVal) * (sliderBar.Size.X.Offset - sliderHandle.Size.X.Offset)
-    sliderHandle.Position = UDim2.new(0, initialHandlePos, 0, 0)
-    sliderHandle.BackgroundColor3 = Color3.fromRGB(180, 180, 180)
-    sliderHandle.BorderColor3 = Color3.fromRGB(255, 255, 255)
-    sliderHandle.BorderSizePixel = 1
-    sliderHandle.Parent = sliderBar
-    local isSliding = false
-    sliderHandle.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then isSliding = true; DragOffset = input.Position - sliderHandle.AbsolutePosition end end)
-    sliderBar.InputEnded:Connect(function() isSliding = false end)
-    mainGui.InputChanged:Connect(function(input) if isSliding and input.UserInputType == Enum.UserInputType.MouseMovement then local currentX = input.Position.X - sliderBar.AbsolutePosition.X - DragOffset.X; currentX = math.max(0, math.min(sliderBar.Size.X.Offset - sliderHandle.Size.X.Offset, currentX)); sliderHandle.Position = UDim2.new(0, currentX, 0, 0); local normalizedValue = currentX / (sliderBar.Size.X.Offset - sliderHandle.Size.X.Offset); local currentValue = minVal + normalizedValue * (maxVal - minVal); labelText.Text = label .. ": " .. string.format("%.2f", currentValue); callback(currentValue); end end)
-    callback(initialVal)
-    return container
-end
-
 local function createToggleSwitch(parent, label, initialValue, position, callback)
     local container = Instance.new("Frame")
-    container.Size = UDim2.new(0.5, -5, 0, 30)
+    container.Size = UDim2.new(0.5, -5, 0, 35) -- Altura maior para toque
     container.Position = position
     container.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     container.BorderColor3 = Color3.fromRGB(50, 50, 50)
@@ -273,7 +213,7 @@ end
 
 local function createDropdown(parent, label, options, initialValue, position, callback)
     local container = Instance.new("Frame")
-    container.Size = UDim2.new(0.5, -5, 0, 30)
+    container.Size = UDim2.new(0.5, -5, 0, 35) -- Altura maior
     container.Position = position
     container.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     container.BorderColor3 = Color3.fromRGB(50, 50, 50)
@@ -331,131 +271,136 @@ local function createDropdown(parent, label, options, initialValue, position, ca
     return container
 end
 
--- Função principal para criar a UI do Menu
-local function createMenuUI()
-    local frame = Instance.new("Frame")
-    frame.Name = "MenuFrame"
-    frame.Size = UDim2.new(0, Settings.MenuWidth, 0, Settings.MenuHeight)
-    frame.Position = UDim2.new(0, Settings.MenuX, 0, Settings.MenuY)
-    frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-    frame.BorderColor3 = Color3.fromRGB(40, 40, 40)
-    frame.BorderSizePixel = 2
-    frame.Visible = Settings.MenuShow
-    frame.Parent = mainGui
-
-    local titleBar = Instance.new("Frame")
-    titleBar.Name = "TitleBar"
-    titleBar.Size = UDim2.new(1, 0, 0, 30)
-    titleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    titleBar.BorderColor3 = Color3.fromRGB(50, 50, 50)
-    titleBar.BorderSizePixel = 1
-    titleBar.Parent = frame
-    local titleLabel = Instance.new("TextLabel")
-    titleLabel.Text = "Arena Pistolas Configs"
-    titleLabel.Size = UDim2.new(1, 0, 1, 0)
-    titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    titleLabel.Font = Enum.Font.SourceSansBold
-    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-    titleLabel.TextYAlignment = Enum.TextYAlignment.Center
-    titleLabel.TextScaled = true
-    titleLabel.BackgroundTransparency = 1
-    titleLabel.PaddingLeft = UDim.new(0, 10)
-    titleLabel.Parent = titleBar
-    local closeButton = Instance.new("TextButton")
-    closeButton.Name = "CloseButton"
-    closeButton.Size = UDim2.new(0, 25, 0, 25)
-    closeButton.Position = UDim2.new(1, -30, 0, 2.5)
-    closeButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-    closeButton.Text = "X"
-    closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    closeButton.Font = Enum.Font.SourceSansBold
-    closeButton.TextScaled = true
-    closeButton.Parent = titleBar
-    closeButton.MouseButton1Click:Connect(function() frame.Visible = false; Settings.MenuShow = false end)
-    titleBar.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then IsDraggingMenu = true; DragOffset = input.Position - frame.AbsolutePosition end end)
-    titleBar.InputEnded:Connect(function() IsDraggingMenu = false end)
-    mainGui.InputChanged:Connect(function(input) if IsDraggingMenu and input.UserInputType == Enum.UserInputType.MouseMovement and Settings.MenuShow then frame.Position = UDim2.new(0, input.Position.X - DragOffset.X, 0, input.Position.Y - DragOffset.Y); Settings.MenuX = input.Position.X - DragOffset.X; Settings.MenuY = input.Position.Y - DragOffset.Y; end end)
-
-    local scrollFrame = Instance.new("ScrollingFrame")
-    scrollFrame.Name = "ScrollFrame"
-    scrollFrame.Size = UDim2.new(1, 0, 1, -40)
-    scrollFrame.Position = UDim2.new(0, 0, 0, 30)
-    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 850) -- Ajustado para mais conteúdo
-    scrollFrame.ScrollBarThickness = 8
-    scrollFrame.BackgroundTransparency = 1
-    scrollFrame.Parent = frame
-
-    local currentY = 5
-
-    -- === SEÇÃO AIMBOT ===
-    local sectionAimbot = createSection(scrollFrame, "Aimbot", currentY, 230)
-    currentY = currentY + sectionAimbot.Size.Y.Offset + 10
-    createToggleSwitch(sectionAimbot, "Ativar", Settings.AimbotEnabled, UDim2.new(0.5, -5, 0, 30), function(state) Settings.AimbotEnabled = state end)
-    createSlider(sectionAimbot, "Suavidade", 1, 10, Settings.AimbotSmoothness, UDim2.new(0, 0, 0, 30), function(value) Settings.AimbotSmoothness = value end)
-    createSlider(sectionAimbot, "FOV", 1, 40, Settings.AimbotFOV, UDim2.new(0, 0, 0, 65), function(value) Settings.AimbotFOV = value end)
-    createDropdown(sectionAimbot, "Alvo", {"Head", "Chest", "Legs", "Root"}, Settings.AimbotTarget, UDim2.new(0.5, -5, 0, 95), function(value) Settings.AimbotTarget = value end)
-    createToggleSwitch(sectionAimbot, "Desenhar FOV", Settings.AimbotDrawFovCircle, UDim2.new(0, 5, 0, 95), function(state) Settings.AimbotDrawFovCircle = state end)
-    createToggleSwitch(sectionAimbot, "Centralizar Mira", Settings.AimbotDrawCrosshair, UDim2.new(0.5, -5, 0, 125), function(state) Settings.AimbotDrawCrosshair = state end)
-    createSlider(sectionAimbot, "Dist. Aimbot", 20, 300, Settings.ESPMaxDistance, UDim2.new(0, 0, 0, 125), function(value) Settings.ESPMaxDistance = value end)
-
-    -- === SEÇÃO ESP ===
-    local sectionESP = createSection(scrollFrame, "ESP", currentY, 270)
-    currentY = currentY + sectionESP.Size.Y.Offset + 10
-    createToggleSwitch(sectionESP, "Ativar", Settings.ESPEnabled, UDim2.new(0.5, -5, 0, 30), function(state) Settings.ESPEnabled = state end)
-    createToggleSwitch(sectionESP, "Box", Settings.ESPBox, UDim2.new(0, 5, 0, 30), function(state) Settings.ESPBox = state end)
-    createToggleSwitch(sectionESP, "Esqueleto", Settings.ESPSkeleton, UDim2.new(0.5, -5, 0, 60), function(state) Settings.ESPSkeleton = state end)
-    createToggleSwitch(sectionESP, "Nome", Settings.ESPName, UDim2.new(0, 5, 0, 60), function(state) Settings.ESPName = state end)
-    createToggleSwitch(sectionESP, "Distância", Settings.ESPDistance, UDim2.new(0.5, -5, 0, 90), function(state) Settings.ESPDistance = state end)
-    createToggleSwitch(sectionESP, "Saúde", Settings.ESPHealth, UDim2.new(0, 5, 0, 90), function(state) Settings.ESPHealth = state end)
-    createToggleSwitch(sectionESP, "Ignorar Aliados", Settings.ESPTeamCheck, UDim2.new(0.5, -5, 0, 120), function(state) Settings.ESPTeamCheck = state end)
-    createSlider(sectionESP, "Dist. ESP", 20, 300, Settings.ESPMaxDistance, UDim2.new(0, 0, 0, 150), function(value) Settings.ESPMaxDistance = value end)
-
-    -- === SEÇÃO TELEPORTE ===
-    local sectionTeleport = createSection(scrollFrame, "Teleporte", currentY, 180)
-    currentY = currentY + sectionTeleport.Size.Y.Offset + 10
-
-    createToggleSwitch(sectionTeleport, "Ativar Comandos", Settings.TeleportEnabled, UDim2.new(0.5, -5, 0, 30), function(state) Settings.TeleportEnabled = state end)
-    createSlider(sectionTeleport, "Posição Y Padrão", 10, 300, Settings.DefaultY, UDim2.new(0, 0, 0, 30), function(value) Settings.DefaultY = value end)
-    -- Campo de entrada para coordenadas (simplificado, usando chat)
-    local teleportInfoLabel = Instance.new("TextLabel")
-    teleportInfoLabel.Text = "Use no chat: " .. Settings.TeleportPrefix .. Settings.TeleportCommand .. " x y z"
-    teleportInfoLabel.Size = UDim2.new(1, -10, 0, 20)
-    teleportInfoLabel.Position = UDim2.new(0, 5, 0, 70)
-    teleportInfoLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-    teleportInfoLabel.Font = Enum.Font.SourceSans
-    teleportInfoLabel.TextXAlignment = Enum.TextXAlignment.Center
-    teleportInfoLabel.TextScaled = true
-    teleportInfoLabel.BackgroundTransparency = 1
-    teleportInfoLabel.Parent = sectionTeleport
-
-    -- === SEÇÃO CORES ===
-    local sectionColors = createSection(scrollFrame, "Cores", currentY, 270)
-    currentY = currentY + sectionColors.Size.Y.Offset + 10
-    createColorPickerButton(sectionColors, "Cor Box", Settings.ColorSettings.BoxColor, UDim2.new(0.5, -5, 0, 30), function(newColor) Settings.ColorSettings.BoxColor = newColor end)
-    createColorPickerButton(sectionColors, "Cor Esqueleto", Settings.ColorSettings.SkeletonColor, UDim2.new(0, 5, 0, 30), function(newColor) Settings.ColorSettings.SkeletonColor = newColor end)
-    createColorPickerButton(sectionColors, "Cor Nome", Settings.ColorSettings.NameColor, UDim2.new(0.5, -5, 0, 60), function(newColor) Settings.ColorSettings.NameColor = newColor end)
-    createColorPickerButton(sectionColors, "Cor Barra Saúde", Settings.ColorSettings.HealthBarColor, UDim2.new(0, 5, 0, 60), function(newColor) Settings.ColorSettings.HealthBarColor = newColor end)
-    createColorPickerButton(sectionColors, "Ponto Cabeça", Settings.ColorSettings.HeadDotColor, UDim2.new(0.5, -5, 0, 90), function(newColor) Settings.ColorSettings.HeadDotColor = newColor end)
-    createColorPickerButton(sectionColors, "Círculo FOV", Settings.ColorSettings.FovCircleColor, UDim2.new(0, 5, 0, 90), function(newColor) Settings.ColorSettings.FovCircleColor = newColor end)
-
-    local rgbToggle = createToggleSwitch(sectionColors, "RGB Realista", Settings.ColorSettings.UseRealisticRGB, UDim2.new(0.5, -5, 0, 120), function(state)
-        Settings.ColorSettings.UseRealisticRGB = state
-        rgbControlsFrame.Visible = state
-    end)
-    local rgbControlsFrame = createRGBControls(sectionColors, UDim2.new(0, 5, 0, 120))
-    rgbControlsFrame.Visible = Settings.ColorSettings.UseRealisticRGB
-
-    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, currentY)
-    return frame
+-- Função para criar um slider (pode ser difícil em mobile, mas vamos incluir)
+local function createSlider(parent, label, minVal, maxVal, initialVal, position, callback)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, -10, 0, 40) -- Altura maior
+    container.Position = position
+    container.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    container.BorderColor3 = Color3.fromRGB(50, 50, 50)
+    container.BorderSizePixel = 1
+    container.Parent = parent
+    local labelText = Instance.new("TextLabel")
+    labelText.Text = label .. ": " .. string.format("%.2f", initialVal)
+    labelText.Size = UDim2.new(1, 0, 0, 18)
+    labelText.Position = UDim2.new(0, 5, 0, 0)
+    labelText.TextColor3 = Color3.fromRGB(220, 220, 220)
+    labelText.Font = Enum.Font.SourceSans
+    labelText.TextXAlignment = Enum.TextXAlignment.Left
+    labelText.TextYAlignment = Enum.TextYAlignment.Center
+    labelText.BackgroundTransparency = 1
+    labelText.Parent = labelText
+    local sliderBar = Instance.new("Frame")
+    sliderBar.Name = "SliderBar"
+    sliderBar.Size = UDim2.new(1, -10, 0, 12) -- Largura total menos bordas
+    sliderBar.Position = UDim2.new(0, 5, 0, 18) -- Abaixo do label
+    sliderBar.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+    sliderBar.BackgroundTransparency = 0.3
+    sliderBar.Parent = container
+    local sliderHandle = Instance.new("Frame")
+    sliderHandle.Name = "SliderHandle"
+    sliderHandle.Size = UDim2.new(0, 20, 1, 0) -- Handle um pouco maior
+    local initialHandlePos = (initialVal - minVal) / (maxVal - minVal) * (sliderBar.Size.X.Offset - sliderHandle.Size.X.Offset)
+    sliderHandle.Position = UDim2.new(0, initialHandlePos, 0, 0)
+    sliderHandle.BackgroundColor3 = Color3.fromRGB(180, 180, 180)
+    sliderHandle.BorderColor3 = Color3.fromRGB(255, 255, 255)
+    sliderHandle.BorderSizePixel = 1
+    sliderHandle.Parent = sliderBar
+    local isSliding = false
+    sliderHandle.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then isSliding = true; DragOffset = input.Position - sliderHandle.AbsolutePosition end end)
+    sliderBar.InputEnded:Connect(function() isSliding = false end)
+    mainGui.InputChanged:Connect(function(input) if isSliding and input.UserInputType == Enum.UserInputType.MouseMovement then local currentX = input.Position.X - sliderBar.AbsolutePosition.X - DragOffset.X; currentX = math.max(0, math.min(sliderBar.Size.X.Offset - sliderHandle.Size.X.Offset, currentX)); sliderHandle.Position = UDim2.new(0, currentX, 0, 0); local normalizedValue = currentX / (sliderBar.Size.X.Offset - sliderHandle.Size.X.Offset); local currentValue = minVal + normalizedValue * (maxVal - minVal); labelText.Text = label .. ": " .. string.format("%.2f", currentValue); callback(currentValue); end end)
+    callback(initialVal)
+    return container
 end
 
--- === FUNÇÕES DE JOGO ===
 
-local function getLocalPlayer() return Players.LocalPlayer end
+-- ==================================================
+-- == POPULAÇÃO DA GUI COM BASE NAS CONFIGURAÇÕES ==
+-- ==================================================
+local currentY = 5
+
+-- Seção Aimbot
+local sectionAimbot = createSection(scrollFrame, "Aimbot", currentY, 300) -- Ajuste a altura conforme necessário
+currentY = currentY + sectionAimbot.Size.Y.Offset + 10
+
+createToggleSwitch(sectionAimbot, "Ativar Aimbot", AimbotConfig.Enabled, UDim2.new(0.5, -5, 0, 30), function(state) AimbotConfig.Enabled = state end)
+createDropdown(sectionAimbot, "Modo Tecla", {"Hold", "Toggle"}, AimbotConfig.AimKeyMode, UDim2.new(0, 5, 0, 30), function(value) AimbotConfig.AimKeyMode = value end)
+local aimKeyDropdown = createDropdown(sectionAimbot, "Tecla Mira", {"Mouse1", "Mouse2", "Q", "E", "R", "F", "X", "Z"}, "Mouse1", UDim2.new(0.5, -5, 0, 65), function(value)
+    local keyMap = {
+        Mouse1 = Enum.KeyCode.Button1, Mouse2 = Enum.KeyCode.Button2, Q = Enum.KeyCode.Q, E = Enum.KeyCode.E,
+        R = Enum.KeyCode.R, F = Enum.KeyCode.F, X = Enum.KeyCode.X, Z = Enum.KeyCode.Z
+    }
+    AimbotConfig.AimKey = keyMap[value] or Enum.KeyCode.Button1
+end)
+aimKeyDropdown.Position = UDim2.new(0, 5, 0, 65)
+
+createDropdown(sectionAimbot, "Alvo", {"Head", "Chest", "Legs", "Root"}, AimbotConfig.TargetType, UDim2.new(0.5, -5, 0, 65), function(value) AimbotConfig.TargetType = value end)
+createSlider(sectionAimbot, "FOV", 1, 60, AimbotConfig.FOV, UDim2.new(0, 0, 0, 95), function(value) AimbotConfig.FOV = value end)
+createSlider(sectionAimbot, "Distância Máx.", 50, 800, AimbotConfig.MaxDistance, UDim2.new(0.5, -5, 0, 95), function(value) AimbotConfig.MaxDistance = value end)
+createToggleSwitch(sectionAimbot, "Desenhar FOV", AimbotConfig.DrawFOV, UDim2.new(0, 5, 0, 125), function(state) AimbotConfig.DrawFOV = state end)
+createToggleSwitch(sectionAimbot, "Desenhar Mira", AimbotConfig.DrawCrosshair, UDim2.new(0.5, -5, 0, 125), function(state) AimbotConfig.DrawCrosshair = state end)
+createToggleSwitch(sectionAimbot, "Info Alvo", AimbotConfig.DrawTargetInfo, UDim2.new(0, 5, 0, 155), function(state) AimbotConfig.DrawTargetInfo = state end)
+
+-- Seção Cores
+local sectionColors = createSection(scrollFrame, "Cores", currentY, 150)
+currentY = currentY + sectionColors.Size.Y.Offset + 10
+local function createColorPickerButton(parent, label, initialColor, position, callback)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(0.5, -5, 0, 35) -- Altura maior
+    container.Position = position
+    container.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    container.BorderColor3 = Color3.fromRGB(50, 50, 50)
+    container.BorderSizePixel = 1
+    container.Parent = parent
+    local labelText = Instance.new("TextLabel")
+    labelText.Text = label
+    labelText.Size = UDim2.new(0.6, 0, 1, 0)
+    labelText.Position = UDim2.new(0, 5, 0, 0)
+    labelText.TextColor3 = Color3.fromRGB(220, 220, 220)
+    labelText.Font = Enum.Font.SourceSans
+    labelText.TextXAlignment = Enum.TextXAlignment.Left
+    labelText.TextYAlignment = Enum.TextYAlignment.Center
+    labelText.BackgroundTransparency = 1
+    labelText.Parent = labelText
+    local colorPreview = Instance.new("Frame")
+    colorPreview.Name = "ColorPreview"
+    colorPreview.Size = UDim2.new(0.4, 0, 1, 0)
+    colorPreview.Position = UDim2.new(0.6, 0, 0, 0)
+    colorPreview.BackgroundColor3 = initialColor
+    colorPreview.Parent = container
+    colorPreview.MouseButton1Click:Connect(function()
+        local presetColors = { Color3.fromRGB(255, 100, 100), Color3.fromRGB(100, 255, 100), Color3.fromRGB(100, 100, 255), Color3.fromRGB(255, 255, 100), Color3.fromRGB(255, 100, 255), Color3.fromRGB(100, 255, 255), Color3.fromRGB(255, 165, 0), Color3.fromRGB(128, 0, 128), Color3.fromRGB(0, 255, 255) }
+        local foundIndex = -1
+        for i, c in ipairs(presetColors) do if c == initialColor then foundIndex = i; break end end
+        local nextColor = foundIndex ~= -1 and foundIndex < #presetColors and presetColors[foundIndex + 1] or presetColors[1]
+        colorPreview.BackgroundColor3 = nextColor
+        initialColor = nextColor
+        callback(nextColor)
+    end)
+    return container
+end
+createColorPickerButton(sectionColors, "Cor FOV", AimbotConfig.FOVColor, UDim2.new(0.5, -5, 0, 30), function(newColor) AimbotConfig.FOVColor = newColor end)
+createColorPickerButton(sectionColors, "Cor Mira", AimbotConfig.CrosshairColor, UDim2.new(0, 5, 0, 30), function(newColor) AimbotConfig.CrosshairColor = newColor end)
+createColorPickerButton(sectionColors, "Cor Info Alvo", AimbotConfig.TargetInfoColor, UDim2.new(0.5, -5, 0, 60), function(newColor) AimbotConfig.TargetInfoColor = newColor end)
+
+scrollFrame.CanvasSize = UDim2.new(0, 0, 0, currentY)
+
+-- ==================================================
+-- == FUNÇÕES DO AIMBOT (IDÊNTICAS AO SCRIPT ANTERIOR) ==
+-- ==================================================
+
+local function getLocalPlayerInfo()
+    local player = Players.LocalPlayer
+    if player and player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
+        return player, player.Character
+    end
+    return nil, nil
+end
 
 local function getPlayerTeam(player)
+    if player and player.Team then return player.Team end
     if player then
-        if player.Team then return player.Team end
         for _, child in ipairs(player:GetChildren()) do
             if child:IsA("ObjectValue") and child.Name == "Team" then return child.Value end
             if child:IsA("StringValue") and child.Name == "Team" then return child.Value end
@@ -465,158 +410,198 @@ local function getPlayerTeam(player)
 end
 
 local function getHeadPart(character)
-    if character then
-        for _, part in ipairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                local nameLower = part.Name:lower()
-                if nameLower:find("head") then return part end
-            end
-        end
-        for _, part in ipairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                local nameLower = part.Name:lower()
-                if nameLower:find("neck") then return part end
-            end
+    if not character then return end
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            local nameLower = part.Name:lower()
+            if nameLower:find("head") or nameLower:find("neck") then return part end
         end
     end
-    return nil
+    return character:FindFirstChild("HumanoidRootPart")
 end
 
 local function getChestPart(character)
-    if character then
-        for _, part in ipairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                local nameLower = part.Name:lower()
-                if nameLower:find("spine") or nameLower:find("chest") or nameLower:find("torso") then return part end
-            end
+    if not character then return end
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            local nameLower = part.Name:lower()
+            if nameLower:find("spine") or nameLower:find("chest") or nameLower:find("torso") then return part end
         end
     end
+    return character:FindFirstChild("HumanoidRootPart")
+end
+
+local function getRootPart(character)
+    if character then return character:FindFirstChild("HumanoidRootPart") end
     return nil
 end
 
-local function getLegParts(character)
-    local legParts = {}
-    if character then
-        for _, part in ipairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                local nameLower = part.Name:lower()
-                if nameLower:find("upperleg") or nameLower:find("lowerleg") or nameLower:find("foot") then
-                    table.insert(legParts, part)
+local function findBestTarget()
+    local bestTargetPart = nil
+    local bestTargetPlayer = nil
+    local closestScreenDist = math.huge
+    local camera = workspace.CurrentCamera
+    if not camera then return nil, nil, nil end
+    local screenCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+    local fovRadius = AimbotConfig.FOV * (camera.ViewportSize.X / 100)
+
+    local player, character = getLocalPlayerInfo()
+    if not player or not character then return nil, nil, nil end
+    local localTeam = getPlayerTeam(player)
+
+    for _, otherPlayer in ipairs(Players:GetPlayers()) do
+        if otherPlayer ~= player then
+            local otherCharacter = otherPlayer.Character
+            if otherCharacter and otherCharacter:FindFirstChild("Humanoid") and otherCharacter:FindFirstChild("HumanoidRootPart") then
+                local otherTeam = getPlayerTeam(otherPlayer)
+
+                if not AimbotConfig.Enabled or not AimbotConfig.IgnoreTeam or (localTeam ~= otherTeam or otherTeam == nil) then
+                    local rootPart = otherCharacter:FindFirstChild("HumanoidRootPart")
+                    if rootPart and (rootPart.Position - character.HumanoidRootPart.Position).Magnitude <= AimbotConfig.MaxDistance then
+                        local targetPart = getTargetPart(otherCharacter, AimbotConfig.TargetType)
+                        if targetPart then
+                            local targetScreenPos = worldToScreen(targetPart.Position)
+                            if targetScreenPos then
+                                local distToCenter = (targetScreenPos - screenCenter).Magnitude
+                                if distToCenter < fovRadius then
+                                    if distToCenter < closestScreenDist then
+                                        closestScreenDist = distToCenter
+                                        bestTargetPart = targetPart
+                                        bestTargetPlayer = otherPlayer
+                                        CurrentTargetScreenPos = targetScreenPos -- Atualiza a posição na tela do alvo atual
+                                    end
+                                end
+                            end
+                        end
+                    end
                 end
             end
         end
     end
-    return legParts
+    return bestTargetPart, bestTargetPlayer, CurrentTargetScreenPos -- Retorna a posição na tela do alvo
 end
 
-local function getRootPart(character)
-    if character then
-        return character:FindFirstChild("HumanoidRootPart")
-    end
-    return nil
-end
-
-local function getTargetPart(character, targetType)
-    if targetType == "Head" then return getHeadPart(character)
-    elseif targetType == "Chest" then return getChestPart(character)
-    elseif targetType == "Legs" then
-        local legs = getLegParts(character)
-        if #legs > 0 then return legs[math.random(1, #legs)] end
-    elseif targetName == "Root" then return getRootPart(character)
-    else return getRootPart(character)
-    end
-end
-
-local function getSkeletonBones(character)
-    local bones = {}
-    if not character then return bones end
-    local root = getRootPart(character)
-    if root then bones["HumanoidRootPart"] = {part = root, screenPos = worldToScreen(root.Position)} end
-    local head = getHeadPart(character)
-    if head then bones["Head"] = {part = head, screenPos = worldToScreen(head.Position)} end
-    local chest = getChestPart(character)
-    if chest then bones["Chest"] = {part = chest, screenPos = worldToScreen(chest.Position)} end
-    local legs = getLegParts(character)
-    if #legs > 0 then
-        bones["LeftLeg"] = {part = legs[1], screenPos = worldToScreen(legs[1].Position)}
-        if #legs > 1 then bones["RightLeg"] = {part = legs[2], screenPos = worldToScreen(legs[2].Position)} end
-    end
-    return bones
-end
-
-local function drawSkeleton(bones, thickness, color)
-    if not bones["HumanoidRootPart"] or not bones["Head"] then return end
-    local spine = bones["Chest"] or bones["HumanoidRootPart"]
-    local head = bones["Head"]
-    if spine.screenPos and head.screenPos then Draw.Line(spine.screenPos, head.screenPos, thickness, color) end
-    if bones["HumanoidRootPart"].screenPos and spine.screenPos then Draw.Line(bones["HumanoidRootPart"].screenPos, spine.screenPos, thickness, color) end
-    if bones["LeftLeg"] and bones["LeftLeg"].screenPos and bones["HumanoidRootPart"].screenPos then Draw.Line(bones["HumanoidRootPart"].screenPos, bones["LeftLeg"].screenPos, thickness, color) end
-    if bones["RightLeg"] and bones["RightLeg"].screenPos and bones["HumanoidRootPart"].screenPos then Draw.Line(bones["HumanoidRootPart"].screenPos, bones["RightLeg"].screenPos, thickness, color) end
-end
-
--- === FUNÇÃO DE TELEPORTE ===
-local function teleportPlayer(x, y, z)
-    if not LocalPlayer or not LocalPlayer.Character then return end
-    local humanoidRootPart = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not humanoidRootPart then return end
-    humanoidRootPart.CFrame = CFrame.new(x, y, z)
-    print("Teleportado para: X=" .. x .. ", Y=" .. y .. ", Z=" .. z)
-end
-
-local function processChatCommand(message)
-    local lowerMessage = message:lower()
-    local prefix = Settings.TeleportPrefix:lower()
-    if lowerMessage:sub(1, #prefix) == prefix then
-        local commandAndArgs = lowerMessage:sub(#prefix + 1)
-        local parts = commandAndArgs:split(" ")
-        local command = parts[1]
-        if command == Settings.TeleportCommand then
-            local x, y, z
-            if #parts == 4 then
-                x = tonumber(parts[2]); y = tonumber(parts[3]); z = tonumber(parts[4])
-            elseif #parts == 3 then
-                x = tonumber(parts[2]); z = tonumber(parts[3]); y = Settings.DefaultY
-            end
-            if x ~= nil and y ~= nil and z ~= nil then
-                teleportPlayer(x, y, z)
-            else
-                warn("Formato incorreto. Use: " .. Settings.TeleportPrefix .. Settings.TeleportCommand .. " x y z OU " .. Settings.TeleportPrefix .. Settings.TeleportCommand .. " x z")
-            end
-        end
-    end
-end
-
--- === LOOP PRINCIPAL ===
-RunService.RenderStepped:Connect(function()
-    if not LocalPlayer or not LocalPlayer.Character then return end
-
-    -- Atualiza a UI do menu
-    if Settings.MenuEnabled then
-        if not mainGui.MenuFrame then menuFrame = createMenuUI() end
-        mainGui.MenuFrame.Visible = Settings.MenuShow
-        mainGui.MenuFrame.Position = UDim2.new(0, Settings.MenuX, 0, Settings.MenuY)
-    else
-        if mainGui.MenuFrame then mainGui.MenuFrame:Destroy(); mainGui.MenuFrame = nil end
-    end
-
-    if Settings.AimbotEnabled then aimbot() end
-    if Settings.ESPEnabled then renderESP() end
-end)
-
--- === FUNÇÃO AIMBOT ===
-local function aimbot()
+local function aimAt(targetPart, targetPlayer, targetScreenPos)
+    local player, character = getLocalPlayerInfo()
+    if not player or not character or not targetPart or not targetPart.Parent or not targetPart.Parent.Parent then return end
     local camera = workspace.CurrentCamera
     if not camera then return end
-    local localPlayer = getLocalPlayer()
-    if not localPlayer or not localPlayer.Character then return end
-    local localRootPart = getRootPart(localPlayer.Character)
-    if not localRootPart then return end
+    local humanoid = character:FindFirstChild("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then return end
 
-    local targetPosition = nil
-    local closestScreenDistance = math.huge
-    local screenCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
-    local fovThreshold = (Settings.AimbotFOV / 100) * math.min(camera.ViewportSize.X, camera.ViewportSize.Y) / 2
-    local localTeam = getPlayerTeam(localPlayer)
+    local targetPosition = targetPart.Position
+    local characterPosition = character.HumanoidRootPart.Position
+    local direction = (targetPosition - characterPosition).Unit
+    local newCameraCFrame = CFrame.new(characterPosition, characterPosition + direction)
 
-    if Settings.AimbotDrawFovCircle then Draw.
+    if camera.CFrame then camera.CFrame = newCameraCFrame
+    elseif camera.CoordinateFrame then camera.CoordinateFrame = newCameraCFrame end
 
+    CurrentTarget = targetPlayer -- Atualiza o alvo global para desenho
+end
+
+-- ==================================================
+-- == LOOP PRINCIPAL E CONTROLE DE ENTRADA (MOBILE) ==
+-- ==================================================
+RunService.RenderStepped:Connect(function()
+    -- Atualiza GUI
+    if menuFrame then menuFrame.Visible = GUIConfig.MenuShow end
+
+    local player, character = getLocalPlayerInfo()
+    if not player or not character then
+        IsAimKeyPressed = false
+        AimbotConfig.Enabled = false -- Desativa aimbot se o jogador morrer
+        CurrentTarget = nil
+        return
+    end
+
+    local camera = workspace.CurrentCamera
+    if not camera then return end
+
+    -- Lógica da Tecla de Mira (adaptada para mobile)
+    local currentAimKeyPressed = UserInputService:IsKeyDown(AimbotConfig.AimKey) -- Funciona se você conectar um teclado/mouse, ou se o executor simular
+
+    if AimbotConfig.AimKeyMode == "Hold" then
+        IsAimKeyPressed = currentAimKeyPressed
+    elseif AimbotConfig.AimKeyMode == "Toggle" then
+        if currentAimKeyPressed and not IsAimKeyPressed then
+            AimToggleState = not AimToggleState
+            AimbotConfig.Enabled = AimToggleState
+        end
+        IsAimKeyPressed = currentAimKeyPressed
+    end
+
+    -- Lógica de Aimbot
+    if AimbotConfig.Enabled and IsAimKeyPressed then
+        local targetPart, targetPlayer, targetScreenPos = findBestTarget()
+        if targetPart then
+            aimAt(targetPart, targetPlayer, targetScreenPos)
+        else
+            CurrentTarget = nil -- Limpa o alvo se nenhum for encontrado
+        end
+    else
+        CurrentTarget = nil -- Limpa o alvo se desativado ou tecla não pressionada
+    end
+
+    -- Desenha indicadores na tela
+    if camera then
+        local screenCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+
+        if AimbotConfig.DrawFOV then
+            -- Desenho simplificado do FOV com cruz
+            Draw.Line(Vector2.new(screenCenter.X - AimbotConfig.FOV, screenCenter.Y), Vector2.new(screenCenter.X + AimbotConfig.FOV, screenCenter.Y), 2, AimbotConfig.FOVColor)
+            Draw.Line(Vector2.new(screenCenter.X, screenCenter.Y - AimbotConfig.FOV), Vector2.new(screenCenter.X, screenCenter.Y + AimbotConfig.FOV), 2, AimbotConfig.FOVColor)
+        end
+
+        if AimbotConfig.DrawCrosshair then
+            Draw.Line(Vector2.new(screenCenter.X - 5, screenCenter.Y), Vector2.new(screenCenter.X + 5, screenCenter.Y), 2, AimbotConfig.CrosshairColor)
+            Draw.Line(Vector2.new(screenCenter.X, screenCenter.Y - 5), Vector2.new(screenCenter.X, screenCenter.Y + 5), 2, AimbotConfig.CrosshairColor)
+        end
+
+        if AimbotConfig.DrawTargetInfo and CurrentTarget and CurrentTargetScreenPos then
+            local targetPlayerName = CurrentTarget.Name
+            local distance = "???m"
+            if character and character.HumanoidRootPart and CurrentTarget.Character and CurrentTarget.Character.HumanoidRootPart then
+                distance = math.floor((CurrentTarget.Character.HumanoidRootPart.Position - character.HumanoidRootPart.Position).Magnitude) .. "m"
+            end
+            local infoText = targetPlayerName .. " (" .. distance .. ")"
+            Draw.Text(infoText, Enum.Font.SourceSansBold, 14, Vector2.new(CurrentTargetScreenPos.X, CurrentTargetScreenPos.Y + 20), AimbotConfig.TargetInfoColor, true)
+        end
+    end
+end)
+
+-- Controles de Entrada (Mouse/Teclado se houver)
+UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
+    -- Lógica da Tecla de Mira (funciona se Delta mapeia o Button1 para clique)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 and AimbotConfig.AimKeyMode == "Hold" then
+        if input.KeyCode == AimbotConfig.AimKey then
+            AimbotConfig.Enabled = true
+        end
+    elseif input.UserInputType == Enum.UserInputType.MouseButton1 and AimbotConfig.AimKeyMode == "Toggle" then
+        if input.KeyCode == AimbotConfig.AimKey then
+            AimToggleState = not AimToggleState
+            AimbotConfig.Enabled = AimToggleState
+        end
+    end
+
+    -- Lógica para mover o menu
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if IsDraggingMenu then IsDraggingMenu = false end
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gameProcessedEvent)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 and AimbotConfig.AimKeyMode == "Hold" then
+        if input.KeyCode == AimbotConfig.AimKey then
+            AimbotConfig.Enabled = false
+        end
+    end
+end)
+
+-- ==================================================
+-- == INICIALIZAÇÃO FINAL ==
+-- ==================================================
+print("Script Aimbot Wallhack (Mobile) para Delta carregado.")
+print("AVISO: Wallhacks são detectáveis e podem levar a banimentos.")
+
+  
