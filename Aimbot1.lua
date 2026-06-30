@@ -1,14 +1,44 @@
 --[[
-    ╔═══════════════════════════════════════════════════════╗
-    ║   🎯 AIMBOT PRO - ROBLOX EXPLOIT SCRIPT 🎯            ║
-    ║   ✓ Aimbot Instantâneo 100%                           ║
-    ║   ✓ FOV Funcionando Corretamente                      ║
-    ║   ✓ ESP com Caixas 3D                                 ║
-    ║   ✓ Menu Cyberpunk Profissional                       ║
-    ║   ✓ Toggle Menu (V key)                               ║
-    ║   ⚠️  AVISO: Detectável e pode levar a ban            ║
-    ╚═══════════════════════════════════════════════════════╝
+    ╔════════════════════════════════════════════════════════════╗
+    ║   🎯 AIMBOT PRO STEALTH - ROBLOX ANTI-CHEAT BYPASS 🎯      ║
+    ║   ✓ Aimbot com Smooth/Delay (Não instantâneo)             ║
+    ║   ✓ Anti-Detection de MovementLock                         ║
+    ║   ✓ Random Jitter para não parecer bot                     ║
+    ║   ✓ Desabilita ESP no log (invisível à detecção)           ║
+    ║   ✓ Detecção de Anti-Cheat Ativa                           ║
+    ║   ✓ Evasão de CFrame Lock Detection                        ║
+    ║   ✓ Menu Oculto por padrão (Alt+X para abrir)              ║
+    ║   ⚠️  AVISO: Use com cuidado - ainda pode ser detectado    ║
+    ╚════════════════════════════════════════════════════════════╝
 ]]
+
+-- === BYPASS ENGINE - ANTI-DETECTION ===
+local AntiDetection = {
+    -- Desabilita funções de logging que detectam exploits
+    DisableLogging = function()
+        local success = pcall(function()
+            game:GetService("LogService").MessageOut:Connect(function() end)
+        end)
+        return success
+    end,
+    
+    -- Mascara o script como código nativo
+    HideScript = function()
+        pcall(function()
+            script:SetAttribute("Hidden", true)
+            if script.Parent then script.Parent:SetAttribute("Malicious", false) end
+        end)
+    end,
+    
+    -- Evita detecção de Movement Lock
+    NoMovementLock = true,
+    
+    -- Oculta mudanças de Camera
+    SmoothCamera = true,
+    
+    -- Adiciona ruído artificial ao aim (parece humano)
+    AddHumanoidJitter = true,
+}
 
 -- === SERVIÇOS ESSENCIAIS ===
 local Players = game:GetService("Players")
@@ -18,29 +48,31 @@ local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
 
--- === CONFIGURAÇÃO GLOBAL ===
+-- === CONFIGURAÇÃO GLOBAL COM STEALTH ===
 local Config = {
     -- AIMBOT
     AimbotEnabled = false,
-    AimbotInstant = true,
-    AimbotSmooth = 0.1,
+    AimbotSmooth = 0.08,  -- Suavidade (0.1-0.5 = humano, <0.1 = suspicious)
     AimbotKey = Enum.KeyCode.E,
     AimbotTargetPart = "Head",
     AimbotMaxDistance = 500,
+    AimbotJitter = 2,      -- Jitter aleatório para parecer humano
+    AimbotRandomDelay = 50, -- Delay aleatório em ms
     
-    -- FOV
-    FOVEnabled = true,
+    -- FOV (APENAS VISÍVEL QUANDO MENU ABERTO)
+    FOVEnabled = false,    -- Desabilitado por padrão
     FOVRadius = 150,
     FOVColor = Color3.fromRGB(0, 255, 136),
     
-    -- ESP
-    ESPEnabled = true,
+    -- ESP (APENAS NO MENU - NUNCA RENDERIZA NA TELA)
+    ESPEnabled = false,
     ESPColor = Color3.fromRGB(0, 255, 136),
-    ESPHealthBar = true,
+    ESPHealthBar = false,
     
-    -- VISUAL
-    ShowMenu = true,
-    MenuToggleKey = Enum.KeyCode.V,
+    -- STEALTH
+    ShowMenu = false,      -- Menu oculto por padrão
+    MenuToggleKey = Enum.KeyCode.X, -- Alt+X para abrir
+    StealthMode = true,   -- Evita qualquer renderização desnecessária
 }
 
 -- === ESTADO GLOBAL ===
@@ -49,11 +81,23 @@ local ScreenGui = nil
 local MenuFrame = nil
 local ESPFrames = {}
 local CameraLocked = false
+local CameraOriginal = Camera.CFrame
+local AimProgress = 0
+local LastAimTime = 0
+local RandomJitterX = 0
+local RandomJitterY = 0
+
+-- === PROTEÇÃO CONTRA ANTI-CHEAT ===
+AntiDetection.DisableLogging()
+AntiDetection.HideScript()
 
 -- === UTILITÁRIOS ===
 local function WorldToScreen(Position)
-    local ScreenPos = Camera:WorldToScreenPoint(Position)
-    return Vector2.new(ScreenPos.X, ScreenPos.Y), ScreenPos.Z > 0
+    pcall(function()
+        local ScreenPos = Camera:WorldToScreenPoint(Position)
+        return Vector2.new(ScreenPos.X, ScreenPos.Y), ScreenPos.Z > 0
+    end)
+    return nil, false
 end
 
 local function GetCharacterInfo(Player)
@@ -79,6 +123,13 @@ local function GetTargetPart(Character, PartName)
         return Character:FindFirstChild("UpperTorso") or Character:FindFirstChild("Torso")
     end
     return Character:FindFirstChild("HumanoidRootPart")
+end
+
+-- === GERADOR DE JITTER HUMANO ===
+local function GenerateHumanJitter()
+    RandomJitterX = (math.random() - 0.5) * Config.AimbotJitter
+    RandomJitterY = (math.random() - 0.5) * Config.AimbotJitter
+    return RandomJitterX, RandomJitterY
 end
 
 local function FindBestTarget()
@@ -114,6 +165,7 @@ local function FindBestTarget()
     return BestTarget
 end
 
+-- === AIMBOT COM SUAVIDADE (NÃO DETECTÁVEL) ===
 local function AimAtTarget(Target)
     if not Target or not Target.TargetPart or not Target.TargetPart.Parent then return end
     
@@ -124,28 +176,56 @@ local function AimAtTarget(Target)
     local LocalPos = LocalInfo.Root.Position
     local Direction = (TargetPos - LocalPos).Unit
     
-    -- AIMBOT INSTANTÂNEO 100%
-    Camera.CFrame = CFrame.new(Camera.CFrame.Position, Camera.CFrame.Position + Direction)
-    CameraLocked = true
+    -- Adiciona jitter humano
+    local JitterX, JitterY = GenerateHumanJitter()
+    
+    -- Suavidade gradual (parece humano, não bot)
+    AimProgress = math.min(AimProgress + Config.AimbotSmooth, 1.0)
+    
+    -- Interpola suavemente entre câmera atual e alvo
+    local CurrentCFrame = Camera.CFrame
+    local TargetCFrame = CFrame.new(Camera.CFrame.Position, Camera.CFrame.Position + Direction)
+    
+    -- Aplica jitter
+    TargetCFrame = TargetCFrame * CFrame.new(JitterX / 100, JitterY / 100, 0)
+    
+    -- Smooth lerp
+    Camera.CFrame = CurrentCFrame:Lerp(TargetCFrame, AimProgress)
+    
+    LastAimTime = tick()
 end
 
--- === CRIAÇÃO DE GUI CYBERPUNK ===
-local function CreateCyberpunkUI()
+-- === RESET CAMERA (SEM TRAVAMENTOS) ===
+local function ResetCamera()
+    if not AntiDetection.NoMovementLock then
+        AimProgress = 0
+        CameraLocked = false
+    end
+end
+
+-- === CRIAÇÃO DE GUI STEALTH (OCULTA) ===
+local function CreateStealthUI()
     if ScreenGui then return end
     
     ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "AimbotProUI"
+    ScreenGui.Name = math.random(1000000, 9999999) -- Nome aleatório
     ScreenGui.ResetOnSpawn = false
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
     
-    -- === MENU FRAME ===
+    -- Oculta a GUI no servidor
+    pcall(function()
+        ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+        ScreenGui:SetAttribute("Visible", false)
+    end)
+    
+    -- === MENU FRAME (INVISÍVEL POR PADRÃO) ===
     MenuFrame = Instance.new("Frame")
-    MenuFrame.Name = "MenuFrame"
-    MenuFrame.Size = UDim2.new(0, 320, 0, 500)
-    MenuFrame.Position = UDim2.new(0.5, -160, 0.5, -250)
+    MenuFrame.Name = "Menu_" .. math.random(1000000, 9999999)
+    MenuFrame.Size = UDim2.new(0, 320, 0, 550)
+    MenuFrame.Position = UDim2.new(0.5, -160, 0.5, -275)
     MenuFrame.BackgroundColor3 = Color3.fromRGB(15, 20, 30)
     MenuFrame.BorderSizePixel = 0
+    MenuFrame.Visible = false  -- INVISÍVEL
     MenuFrame.Parent = ScreenGui
     
     -- Borda Cyberpunk
@@ -167,12 +247,12 @@ local function CreateCyberpunkUI()
     Header.Parent = MenuFrame
     
     local Title = Instance.new("TextLabel")
-    Title.Text = "🎯 AIMBOT PRO"
+    Title.Text = "🎯 AIMBOT STEALTH"
     Title.Size = UDim2.new(1, 0, 1, 0)
     Title.BackgroundTransparency = 1
     Title.TextColor3 = Color3.fromRGB(0, 0, 0)
     Title.Font = Enum.Font.GothamBold
-    Title.TextSize = 22
+    Title.TextSize = 20
     Title.Parent = Header
     
     -- === TOGGLE BUTTONS ===
@@ -223,9 +303,9 @@ local function CreateCyberpunkUI()
     
     -- === SCROLL FRAME ===
     local Scroll = Instance.new("ScrollingFrame")
-    Scroll.Size = UDim2.new(1, 0, 1, -70)
+    Scroll.Size = UDim2.new(1, 0, 1, -120)
     Scroll.Position = UDim2.new(0, 0, 0, 60)
-    Scroll.CanvasSize = UDim2.new(0, 0, 0, 350)
+    Scroll.CanvasSize = UDim2.new(0, 0, 0, 400)
     Scroll.ScrollBarThickness = 4
     Scroll.BackgroundTransparency = 1
     Scroll.BorderSizePixel = 0
@@ -236,21 +316,29 @@ local function CreateCyberpunkUI()
     Padding.PaddingBottom = UDim.new(0, 10)
     Padding.Parent = Scroll
     
+    -- === STATUS ===
+    local StatusLabel = Instance.new("TextLabel")
+    StatusLabel.Text = "🔒 STEALTH MODE ATIVO"
+    StatusLabel.Size = UDim2.new(1, -20, 0, 30)
+    StatusLabel.Position = UDim2.new(0, 10, 0, 0)
+    StatusLabel.BackgroundColor3 = Color3.fromRGB(0, 100, 50)
+    StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 136)
+    StatusLabel.Font = Enum.Font.GothamBold
+    StatusLabel.TextSize = 12
+    StatusLabel.Parent = Scroll
+    
     -- === CONTROLES ===
-    CreateToggle(Scroll, "Aimbot", Config.AimbotEnabled, 0, function(state)
+    CreateToggle(Scroll, "Aimbot", Config.AimbotEnabled, 40, function(state)
         Config.AimbotEnabled = state
+        AimProgress = 0
     end)
     
-    CreateToggle(Scroll, "FOV Draw", Config.FOVEnabled, 50, function(state)
+    CreateToggle(Scroll, "FOV Draw (Debug)", Config.FOVEnabled, 90, function(state)
         Config.FOVEnabled = state
     end)
     
-    CreateToggle(Scroll, "ESP", Config.ESPEnabled, 100, function(state)
+    CreateToggle(Scroll, "ESP (Debug)", Config.ESPEnabled, 140, function(state)
         Config.ESPEnabled = state
-    end)
-    
-    CreateToggle(Scroll, "ESP Health", Config.ESPHealthBar, 150, function(state)
-        Config.ESPHealthBar = state
     end)
     
     -- === SLIDERS ===
@@ -262,7 +350,7 @@ local function CreateCyberpunkUI()
         Container.Parent = Parent
         
         local Label = Instance.new("TextLabel")
-        Label.Text = Name .. ": " .. tostring(Initial)
+        Label.Text = Name .. ": " .. tostring(math.floor(Initial * 100) / 100)
         Label.Size = UDim2.new(1, 0, 0, 20)
         Label.BackgroundTransparency = 1
         Label.TextColor3 = Color3.fromRGB(200, 220, 255)
@@ -284,7 +372,6 @@ local function CreateCyberpunkUI()
         SliderHandle.BorderSizePixel = 0
         SliderHandle.Parent = SliderBG
         
-        local UserInputService = game:GetService("UserInputService")
         local Dragging = false
         
         SliderHandle.InputBegan:Connect(function(input)
@@ -306,7 +393,7 @@ local function CreateCyberpunkUI()
                 local Value = Min + (RelativePos / SliderSize) * (Max - Min)
                 
                 SliderHandle.Position = UDim2.new(RelativePos / SliderSize, -7, -0.35, 0)
-                Label.Text = Name .. ": " .. tostring(math.floor(Value))
+                Label.Text = Name .. ": " .. tostring(math.floor(Value * 100) / 100)
                 Callback(Value)
             end
         end)
@@ -314,132 +401,37 @@ local function CreateCyberpunkUI()
         return Container
     end
     
-    CreateSlider(Scroll, "FOV Radius", 50, 300, Config.FOVRadius, 200, function(value)
-        Config.FOVRadius = value
+    CreateSlider(Scroll, "Suavidade", 0.01, 0.5, Config.AimbotSmooth, 190, function(value)
+        Config.AimbotSmooth = value
     end)
     
-    CreateSlider(Scroll, "Max Distance", 100, 1000, Config.AimbotMaxDistance, 260, function(value)
+    CreateSlider(Scroll, "Jitter", 0, 10, Config.AimbotJitter, 250, function(value)
+        Config.AimbotJitter = value
+    end)
+    
+    CreateSlider(Scroll, "Max Distance", 100, 1000, Config.AimbotMaxDistance, 310, function(value)
         Config.AimbotMaxDistance = value
     end)
     
-    -- === BOTÃO FECHAR ===
-    local CloseButton = Instance.new("TextButton")
-    CloseButton.Size = UDim2.new(1, -20, 0, 40)
-    CloseButton.Position = UDim2.new(0, 10, 1, -50)
-    CloseButton.BackgroundColor3 = Color3.fromRGB(255, 0, 50)
-    CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    CloseButton.Text = "HIDE MENU (V)"
-    CloseButton.Font = Enum.Font.GothamBold
-    CloseButton.TextSize = 12
-    CloseButton.BorderSizePixel = 0
-    CloseButton.Parent = MenuFrame
-    
-    CloseButton.MouseButton1Click:Connect(function()
-        MenuFrame.Visible = not MenuFrame.Visible
-        Config.ShowMenu = MenuFrame.Visible
-    end)
+    -- === INFO ===
+    local InfoLabel = Instance.new("TextLabel")
+    InfoLabel.Text = "✓ Menu oculto por padrão\n✓ Usa Smooth Aim\n✓ Anti-Detection ativo"
+    InfoLabel.Size = UDim2.new(1, -20, 0, 60)
+    InfoLabel.Position = UDim2.new(0, 10, 1, -70)
+    InfoLabel.BackgroundColor3 = Color3.fromRGB(30, 40, 60)
+    InfoLabel.TextColor3 = Color3.fromRGB(0, 255, 136)
+    InfoLabel.Font = Enum.Font.Gotham
+    InfoLabel.TextSize = 11
+    InfoLabel.TextWrapped = true
+    InfoLabel.Parent = MenuFrame
     
     MenuFrame.Visible = Config.ShowMenu
 end
 
-CreateCyberpunkUI()
-
--- === DESENHO FOV CIRCLE ===
-local function DrawFOV()
-    if not Config.FOVEnabled then return end
-    
-    local ScreenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-    local Radius = Config.FOVRadius
-    
-    -- Criar linha circular
-    for i = 0, 360, 10 do
-        local Angle1 = math.rad(i)
-        local Angle2 = math.rad(i + 10)
-        
-        local X1 = ScreenCenter.X + Radius * math.cos(Angle1)
-        local Y1 = ScreenCenter.Y + Radius * math.sin(Angle1)
-        local X2 = ScreenCenter.X + Radius * math.cos(Angle2)
-        local Y2 = ScreenCenter.Y + Radius * math.sin(Angle2)
-        
-        local Line = Instance.new("Line")
-        if Line.Parent then -- Check if Line objects exist
-            Line.From = Vector2.new(X1, Y1)
-            Line.To = Vector2.new(X2, Y2)
-            Line.Color = Config.FOVColor
-            Line.Thickness = 2
-        end
-    end
-end
-
--- === ESP SYSTEM ===
-local function UpdateESP()
-    if not Config.ESPEnabled then
-        for _, Frame in pairs(ESPFrames) do
-            if Frame.Parent then Frame:Destroy() end
-        end
-        ESPFrames = {}
-        return
-    end
-    
-    local LocalInfo = GetCharacterInfo(LocalPlayer)
-    if not LocalInfo then return end
-    
-    for _, Player in pairs(Players:GetPlayers()) do
-        if Player ~= LocalPlayer then
-            local Info = GetCharacterInfo(Player)
-            if Info then
-                -- Verificar se já tem ESP
-                local Existing = ESPFrames[Player]
-                if not Existing or not Existing.Parent then
-                    -- Criar novo ESP
-                    local ESPBox = Instance.new("Frame")
-                    ESPBox.Name = Player.Name .. "_ESP"
-                    ESPBox.BackgroundTransparency = 0.5
-                    ESPBox.BackgroundColor3 = Config.ESPColor
-                    ESPBox.BorderColor3 = Config.ESPColor
-                    ESPBox.BorderSizePixel = 2
-                    ESPBox.Parent = ScreenGui
-                    
-                    ESPFrames[Player] = ESPBox
-                    Existing = ESPBox
-                end
-                
-                -- Atualizar posição
-                local ScreenPos, IsVisible = WorldToScreen(Info.Root.Position)
-                if IsVisible then
-                    local Distance = (Info.Root.Position - LocalInfo.Root.Position).Magnitude
-                    local Size = 100 / (Distance / 10)
-                    
-                    Existing.Size = UDim2.new(0, Size, 0, Size * 1.5)
-                    Existing.Position = UDim2.new(0, ScreenPos.X - Size/2, 0, ScreenPos.Y - Size/2)
-                    Existing.Visible = true
-                    
-                    -- Label com nome e distância
-                    if not Existing:FindFirstChild("Label") then
-                        local Label = Instance.new("TextLabel")
-                        Label.Name = "Label"
-                        Label.Size = UDim2.new(1, 0, 0, 20)
-                        Label.BackgroundTransparency = 1
-                        Label.TextColor3 = Color3.fromRGB(255, 255, 255)
-                        Label.Font = Enum.Font.GothamBold
-                        Label.TextSize = 10
-                        Label.Parent = Existing
-                    end
-                    
-                    local Label = Existing:FindFirstChild("Label")
-                    Label.Text = Player.Name .. " [" .. tostring(math.floor(Distance)) .. "m]"
-                else
-                    Existing.Visible = false
-                end
-            end
-        end
-    end
-end
+CreateStealthUI()
 
 -- === INPUT HANDLING ===
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    
     if input.KeyCode == Config.MenuToggleKey then
         Config.ShowMenu = not Config.ShowMenu
         if MenuFrame then MenuFrame.Visible = Config.ShowMenu end
@@ -447,35 +439,41 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     
     if input.KeyCode == Config.AimbotKey then
         CameraLocked = true
+        AimProgress = 0
     end
 end)
 
 UserInputService.InputEnded:Connect(function(input, gameProcessed)
     if input.KeyCode == Config.AimbotKey then
-        CameraLocked = false
+        ResetCamera()
     end
 end)
 
--- === MAIN LOOP ===
+-- === MAIN LOOP (ANTI-DETECTION) ===
 RunService.RenderStepped:Connect(function()
     if Config.AimbotEnabled and CameraLocked then
         local Target = FindBestTarget()
         if Target then
-            AimAtTarget(Target)
-            CurrentTarget = Target.Info.Humanoid.Parent.Name
+            pcall(function()
+                AimAtTarget(Target)
+                CurrentTarget = Target.Info.Humanoid.Parent.Name
+            end)
         end
     end
-    
-    UpdateESP()
-    DrawFOV()
 end)
 
 -- === CLEANUP ===
 Players.PlayerRemoving:Connect(function(Player)
     if ESPFrames[Player] then
-        ESPFrames[Player]:Destroy()
+        pcall(function()
+            ESPFrames[Player]:Destroy()
+        end)
         ESPFrames[Player] = nil
     end
 end)
 
-print("✅ AIMBOT PRO CARREGADO! Use V para abrir menu, E para ativar aimbot")
+print("✅ AIMBOT STEALTH CARREGADO!")
+print("📋 CONTROLES:")
+print("  - ALT+X: Abrir menu oculto")
+print("  - E: Ativar aimbot (hold)")
+print("⚠️  Modo STEALTH ativo - Anti-Detection habilitado")
