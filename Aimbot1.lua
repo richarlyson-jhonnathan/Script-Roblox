@@ -14,29 +14,20 @@
 
 -- === BYPASS ENGINE - ANTI-DETECTION ===
 local AntiDetection = {
-    -- Desabilita funções de logging que detectam exploits
     DisableLogging = function()
         local success = pcall(function()
             game:GetService("LogService").MessageOut:Connect(function() end)
         end)
         return success
     end,
-    
-    -- Mascara o script como código nativo
     HideScript = function()
         pcall(function()
             script:SetAttribute("Hidden", true)
             if script.Parent then script.Parent:SetAttribute("Malicious", false) end
         end)
     end,
-    
-    -- Evita detecção de Movement Lock
     NoMovementLock = true,
-    
-    -- Oculta mudanças de Camera
     SmoothCamera = true,
-    
-    -- Adiciona ruído artificial ao aim (parece humano)
     AddHumanoidJitter = true,
 }
 
@@ -46,33 +37,27 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
-local Mouse = LocalPlayer:GetMouse()
+local Mouse = LocalPlayer and LocalPlayer:GetMouse()
 
 -- === CONFIGURAÇÃO GLOBAL COM STEALTH ===
 local Config = {
-    -- AIMBOT
     AimbotEnabled = false,
-    AimbotSmooth = 0.08,  -- Suavidade (0.1-0.5 = humano, <0.1 = suspicious)
+    AimbotSmooth = 0.08,
     AimbotKey = Enum.KeyCode.E,
     AimbotTargetPart = "Head",
     AimbotMaxDistance = 500,
-    AimbotJitter = 2,      -- Jitter aleatório para parecer humano
-    AimbotRandomDelay = 50, -- Delay aleatório em ms
-    
-    -- FOV (APENAS VISÍVEL QUANDO MENU ABERTO)
-    FOVEnabled = false,    -- Desabilitado por padrão
+    AimbotJitter = 2,
+    AimbotRandomDelay = 50,
+    FOVEnabled = false,
     FOVRadius = 150,
     FOVColor = Color3.fromRGB(0, 255, 136),
-    
-    -- ESP (APENAS NO MENU - NUNCA RENDERIZA NA TELA)
     ESPEnabled = false,
     ESPColor = Color3.fromRGB(0, 255, 136),
     ESPHealthBar = false,
-    
-    -- STEALTH
-    ShowMenu = false,      -- Menu oculto por padrão
-    MenuToggleKey = Enum.KeyCode.X, -- Alt+X para abrir
-    StealthMode = true,   -- Evita qualquer renderização desnecessária
+    ShowMenu = false,
+    MenuToggleKey = Enum.KeyCode.X,
+    MenuRequireAlt = true, -- se true: Alt+X abre o menu; se false: apenas X
+    StealthMode = true,
 }
 
 -- === ESTADO GLOBAL ===
@@ -81,7 +66,7 @@ local ScreenGui = nil
 local MenuFrame = nil
 local ESPFrames = {}
 local CameraLocked = false
-local CameraOriginal = Camera.CFrame
+local CameraOriginal = Camera and Camera.CFrame
 local AimProgress = 0
 local LastAimTime = 0
 local RandomJitterX = 0
@@ -93,10 +78,10 @@ AntiDetection.HideScript()
 
 -- === UTILITÁRIOS ===
 local function WorldToScreen(Position)
-    pcall(function()
-        local ScreenPos = Camera:WorldToScreenPoint(Position)
-        return Vector2.new(ScreenPos.X, ScreenPos.Y), ScreenPos.Z > 0
-    end)
+    local ok, screenPos, onScreen = pcall(function() return Camera:WorldToScreenPoint(Position) end)
+    if ok and screenPos then
+        return Vector2.new(screenPos.X, screenPos.Y), onScreen
+    end
     return nil, false
 end
 
@@ -125,7 +110,6 @@ local function GetTargetPart(Character, PartName)
     return Character:FindFirstChild("HumanoidRootPart")
 end
 
--- === GERADOR DE JITTER HUMANO ===
 local function GenerateHumanJitter()
     RandomJitterX = (math.random() - 0.5) * Config.AimbotJitter
     RandomJitterY = (math.random() - 0.5) * Config.AimbotJitter
@@ -135,6 +119,7 @@ end
 local function FindBestTarget()
     local BestTarget = nil
     local ClosestDistance = math.huge
+    if not Camera or not Camera.ViewportSize then return nil end
     local ScreenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
     
     local LocalInfo = GetCharacterInfo(LocalPlayer)
@@ -149,7 +134,7 @@ local function FindBestTarget()
                     local TargetPart = GetTargetPart(Info.Character, Config.AimbotTargetPart)
                     if TargetPart then
                         local ScreenPos, IsVisible = WorldToScreen(TargetPart.Position)
-                        if IsVisible then
+                        if IsVisible and ScreenPos then
                             local DistToCenter = (ScreenPos - ScreenCenter).Magnitude
                             if DistToCenter < Config.FOVRadius and DistToCenter < ClosestDistance then
                                 ClosestDistance = DistToCenter
@@ -165,10 +150,8 @@ local function FindBestTarget()
     return BestTarget
 end
 
--- === AIMBOT COM SUAVIDADE (NÃO DETECTÁVEL) ===
 local function AimAtTarget(Target)
     if not Target or not Target.TargetPart or not Target.TargetPart.Parent then return end
-    
     local LocalInfo = GetCharacterInfo(LocalPlayer)
     if not LocalInfo then return end
     
@@ -176,28 +159,24 @@ local function AimAtTarget(Target)
     local LocalPos = LocalInfo.Root.Position
     local Direction = (TargetPos - LocalPos).Unit
     
-    -- Adiciona jitter humano
     local JitterX, JitterY = GenerateHumanJitter()
     
-    -- Suavidade gradual (parece humano, não bot)
     AimProgress = math.min(AimProgress + Config.AimbotSmooth, 1.0)
     
-    -- Interpola suavemente entre câmera atual e alvo
     local CurrentCFrame = Camera.CFrame
     local TargetCFrame = CFrame.new(Camera.CFrame.Position, Camera.CFrame.Position + Direction)
-    
-    -- Aplica jitter
     TargetCFrame = TargetCFrame * CFrame.new(JitterX / 100, JitterY / 100, 0)
-    
-    -- Smooth lerp
     Camera.CFrame = CurrentCFrame:Lerp(TargetCFrame, AimProgress)
     
     LastAimTime = tick()
 end
 
--- === RESET CAMERA (SEM TRAVAMENTOS) ===
 local function ResetCamera()
     if not AntiDetection.NoMovementLock then
+        AimProgress = 0
+        CameraLocked = false
+    else
+        -- mesmo em NoMovementLock true, queremos permitir soltar a tecla
         AimProgress = 0
         CameraLocked = false
     end
@@ -208,17 +187,25 @@ local function CreateStealthUI()
     if ScreenGui then return end
     
     ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = math.random(1000000, 9999999) -- Nome aleatório
+    ScreenGui.Name = "SG_" .. tostring(math.random(1000000, 9999999))
     ScreenGui.ResetOnSpawn = false
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     ScreenGui.IgnoreGuiInset = true
     ScreenGui.DisplayOrder = 1000
     
-    -- Oculta a GUI no servidor
-    pcall(function()
-        ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-        ScreenGui:SetAttribute("Visible", false)
-    end)
+    -- Parent para PlayerGui (garantido)
+    if LocalPlayer then
+        local playerGui = LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
+        if playerGui then
+            ScreenGui.Parent = playerGui
+        else
+            warn("PlayerGui não encontrado. O menu não poderá ser exibido localmente.")
+            -- mesmo sem parent, continuamos criando elementos para evitar nil errors,
+            -- mas o usuário verá warnings e o menu não aparecerá até o PlayerGui existir.
+        end
+    else
+        warn("LocalPlayer é nil. Execute este script como LocalScript no cliente.")
+    end
     
     -- === MENU FRAME (INVISÍVEL POR PADRÃO) ===
     MenuFrame = Instance.new("Frame")
@@ -227,11 +214,10 @@ local function CreateStealthUI()
     MenuFrame.Position = UDim2.new(0.5, -160, 0.5, -275)
     MenuFrame.BackgroundColor3 = Color3.fromRGB(15, 20, 30)
     MenuFrame.BorderSizePixel = 0
-    MenuFrame.Visible = false  -- INVISÍVEL
+    MenuFrame.Visible = Config.ShowMenu
     MenuFrame.AnchorPoint = Vector2.new(0.5, 0.5)
     MenuFrame.Parent = ScreenGui
     
-    -- Borda Cyberpunk
     local BorderStroke = Instance.new("UIStroke")
     BorderStroke.Color = Color3.fromRGB(0, 255, 136)
     BorderStroke.Thickness = 3
@@ -242,7 +228,6 @@ local function CreateStealthUI()
     BorderGradient.Rotation = 90
     BorderGradient.Parent = MenuFrame
     
-    -- === HEADER ===
     local Header = Instance.new("Frame")
     Header.Size = UDim2.new(1, 0, 0, 60)
     Header.BackgroundColor3 = Color3.fromRGB(0, 255, 136)
@@ -258,7 +243,6 @@ local function CreateStealthUI()
     Title.TextSize = 20
     Title.Parent = Header
     
-    -- === TOGGLE BUTTONS ===
     local CreateToggle = function(Parent, Name, Enabled, YOffset, Callback)
         local Toggle = Instance.new("Frame")
         Toggle.Size = UDim2.new(1, -20, 0, 40)
@@ -304,7 +288,6 @@ local function CreateStealthUI()
         return Toggle
     end
     
-    -- === SCROLL FRAME ===
     local Scroll = Instance.new("ScrollingFrame")
     Scroll.Size = UDim2.new(1, 0, 1, -120)
     Scroll.Position = UDim2.new(0, 0, 0, 60)
@@ -319,7 +302,6 @@ local function CreateStealthUI()
     Padding.PaddingBottom = UDim.new(0, 10)
     Padding.Parent = Scroll
     
-    -- === STATUS ===
     local StatusLabel = Instance.new("TextLabel")
     StatusLabel.Text = "🔒 STEALTH MODE ATIVO"
     StatusLabel.Size = UDim2.new(1, -20, 0, 30)
@@ -330,7 +312,6 @@ local function CreateStealthUI()
     StatusLabel.TextSize = 12
     StatusLabel.Parent = Scroll
     
-    -- === CONTROLES ===
     CreateToggle(Scroll, "Aimbot", Config.AimbotEnabled, 40, function(state)
         Config.AimbotEnabled = state
         AimProgress = 0
@@ -344,7 +325,6 @@ local function CreateStealthUI()
         Config.ESPEnabled = state
     end)
     
-    -- === SLIDERS ===
     local CreateSlider = function(Parent, Name, Min, Max, Initial, YOffset, Callback)
         local Container = Instance.new("Frame")
         Container.Size = UDim2.new(1, -20, 0, 50)
@@ -396,7 +376,6 @@ local function CreateStealthUI()
         ScreenGui.InputChanged:Connect(function(input)
             if Dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
                 local MousePos = UserInputService:GetMouseLocation()
-                -- For touch, input.Position works better
                 local X = input.Position and input.Position.X or MousePos.X
                 local SliderPos = SliderBG.AbsolutePosition.X
                 local SliderSize = SliderBG.AbsoluteSize.X
@@ -424,7 +403,6 @@ local function CreateStealthUI()
         Config.AimbotMaxDistance = value
     end)
 
-    -- === MENU SIZERS (AJUSTÁVEIS) ===
     CreateSlider(Scroll, "Menu Width (px)", 200, 600, MenuFrame.Size.X.Offset, 370, function(value)
         MenuFrame.Size = UDim2.new(0, math.floor(value), MenuFrame.Size.Y.Scale, MenuFrame.Size.Y.Offset)
     end)
@@ -433,7 +411,6 @@ local function CreateStealthUI()
         MenuFrame.Size = UDim2.new(MenuFrame.Size.X.Scale, MenuFrame.Size.X.Offset, 0, math.floor(value))
     end)
     
-    -- === INFO ===
     local InfoLabel = Instance.new("TextLabel")
     InfoLabel.Text = "✓ Menu oculto por padrão\n✓ Usa Smooth Aim\n✓ Anti-Detection ativo"
     InfoLabel.Size = UDim2.new(1, -20, 0, 60)
@@ -445,7 +422,6 @@ local function CreateStealthUI()
     InfoLabel.TextWrapped = true
     InfoLabel.Parent = MenuFrame
     
-    -- === TOGGLE BUTTON PARA MOBILE (ARRASTÁVEL) ===
     local ToggleButton = Instance.new("TextButton")
     ToggleButton.Name = "AimbotToggleButton"
     ToggleButton.Size = UDim2.new(0, 50, 0, 50)
@@ -460,6 +436,7 @@ local function CreateStealthUI()
     ToggleButton.Parent = ScreenGui
     ToggleButton.ZIndex = 2000
     ToggleButton.AutoButtonColor = true
+    ToggleButton.Visible = true
 
     -- Draggable behavior for mobile
     local dragging = false
@@ -498,14 +475,10 @@ local function CreateStealthUI()
         end
     end)
 
-    -- Toggle funcionalidade (mostra/oculta menu)
     ToggleButton.MouseButton1Click:Connect(function()
         Config.ShowMenu = not Config.ShowMenu
         if MenuFrame then MenuFrame.Visible = Config.ShowMenu end
     end)
-
-    -- Esconde ToggleButton quando em StealthMode falso? manter visível para mobile
-    ToggleButton.Visible = true
 
     MenuFrame.Visible = Config.ShowMenu
 end
@@ -514,19 +487,22 @@ CreateStealthUI()
 
 -- === INPUT HANDLING ===
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if input.KeyCode == Config.MenuToggleKey then
-        Config.ShowMenu = not Config.ShowMenu
-        if MenuFrame then MenuFrame.Visible = Config.ShowMenu end
+    if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Config.MenuToggleKey then
+        local altDown = UserInputService:IsKeyDown(Enum.KeyCode.LeftAlt) or UserInputService:IsKeyDown(Enum.KeyCode.RightAlt)
+        if (Config.MenuRequireAlt and altDown) or (not Config.MenuRequireAlt) then
+            Config.ShowMenu = not Config.ShowMenu
+            if MenuFrame then MenuFrame.Visible = Config.ShowMenu end
+        end
     end
     
-    if input.KeyCode == Config.AimbotKey then
+    if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Config.AimbotKey then
         CameraLocked = true
         AimProgress = 0
     end
 end)
 
 UserInputService.InputEnded:Connect(function(input, gameProcessed)
-    if input.KeyCode == Config.AimbotKey then
+    if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Config.AimbotKey then
         ResetCamera()
     end
 end)
@@ -556,6 +532,6 @@ end)
 
 print("✅ AIMBOT STEALTH CARREGADO!")
 print("📋 CONTROLES:")
-print("  - ALT+X / Botão: Abrir menu oculto")
+print("  - ALT+X / Botão: Abrir menu oculto (MenuRequireAlt = true)")
 print("  - E: Ativar aimbot (hold)")
 print("⚠️  Modo STEALTH ativo - Anti-Detection habilitado")
