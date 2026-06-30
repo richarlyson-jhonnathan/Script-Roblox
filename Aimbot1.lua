@@ -7,7 +7,7 @@
     ║   ✓ Desabilita ESP no log (invisível à detecção)           ║
     ║   ✓ Detecção de Anti-Cheat Ativa                           ║
     ║   ✓ Evasão de CFrame Lock Detection                        ║
-    ║   ✓ Menu Oculto por padrão (Alt+X para abrir)              ║
+    ║   ✓ Menu Oculto por padrão (Alt+X para abrir / botão mobile)║
     ║   ⚠️  AVISO: Use com cuidado - ainda pode ser detectado    ║
     ╚════════════════════════════════════════════════════════════╝
 ]]
@@ -211,6 +211,8 @@ local function CreateStealthUI()
     ScreenGui.Name = math.random(1000000, 9999999) -- Nome aleatório
     ScreenGui.ResetOnSpawn = false
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    ScreenGui.IgnoreGuiInset = true
+    ScreenGui.DisplayOrder = 1000
     
     -- Oculta a GUI no servidor
     pcall(function()
@@ -226,6 +228,7 @@ local function CreateStealthUI()
     MenuFrame.BackgroundColor3 = Color3.fromRGB(15, 20, 30)
     MenuFrame.BorderSizePixel = 0
     MenuFrame.Visible = false  -- INVISÍVEL
+    MenuFrame.AnchorPoint = Vector2.new(0.5, 0.5)
     MenuFrame.Parent = ScreenGui
     
     -- Borda Cyberpunk
@@ -373,10 +376,16 @@ local function CreateStealthUI()
         SliderHandle.Parent = SliderBG
         
         local Dragging = false
+        local dragConn
         
         SliderHandle.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                 Dragging = true
+                input.Changed:Connect(function()
+                    if input.UserInputState == Enum.UserInputState.End then
+                        Dragging = false
+                    end
+                end)
             end
         end)
         
@@ -385,11 +394,13 @@ local function CreateStealthUI()
         end)
         
         ScreenGui.InputChanged:Connect(function(input)
-            if Dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            if Dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
                 local MousePos = UserInputService:GetMouseLocation()
+                -- For touch, input.Position works better
+                local X = input.Position and input.Position.X or MousePos.X
                 local SliderPos = SliderBG.AbsolutePosition.X
                 local SliderSize = SliderBG.AbsoluteSize.X
-                local RelativePos = math.max(0, math.min(MousePos.X - SliderPos, SliderSize))
+                local RelativePos = math.max(0, math.min(X - SliderPos, SliderSize))
                 local Value = Min + (RelativePos / SliderSize) * (Max - Min)
                 
                 SliderHandle.Position = UDim2.new(RelativePos / SliderSize, -7, -0.35, 0)
@@ -412,6 +423,15 @@ local function CreateStealthUI()
     CreateSlider(Scroll, "Max Distance", 100, 1000, Config.AimbotMaxDistance, 310, function(value)
         Config.AimbotMaxDistance = value
     end)
+
+    -- === MENU SIZERS (AJUSTÁVEIS) ===
+    CreateSlider(Scroll, "Menu Width (px)", 200, 600, MenuFrame.Size.X.Offset, 370, function(value)
+        MenuFrame.Size = UDim2.new(0, math.floor(value), MenuFrame.Size.Y.Scale, MenuFrame.Size.Y.Offset)
+    end)
+
+    CreateSlider(Scroll, "Menu Height (px)", 300, 800, MenuFrame.Size.Y.Offset, 430, function(value)
+        MenuFrame.Size = UDim2.new(MenuFrame.Size.X.Scale, MenuFrame.Size.X.Offset, 0, math.floor(value))
+    end)
     
     -- === INFO ===
     local InfoLabel = Instance.new("TextLabel")
@@ -425,6 +445,68 @@ local function CreateStealthUI()
     InfoLabel.TextWrapped = true
     InfoLabel.Parent = MenuFrame
     
+    -- === TOGGLE BUTTON PARA MOBILE (ARRASTÁVEL) ===
+    local ToggleButton = Instance.new("TextButton")
+    ToggleButton.Name = "AimbotToggleButton"
+    ToggleButton.Size = UDim2.new(0, 50, 0, 50)
+    ToggleButton.Position = UDim2.new(0, 20, 1, -80)
+    ToggleButton.AnchorPoint = Vector2.new(0, 1)
+    ToggleButton.BackgroundColor3 = Color3.fromRGB(0, 255, 136)
+    ToggleButton.BackgroundTransparency = 0.15
+    ToggleButton.Text = "≡"
+    ToggleButton.TextColor3 = Color3.fromRGB(0,0,0)
+    ToggleButton.Font = Enum.Font.GothamBold
+    ToggleButton.TextSize = 28
+    ToggleButton.Parent = ScreenGui
+    ToggleButton.ZIndex = 2000
+    ToggleButton.AutoButtonColor = true
+
+    -- Draggable behavior for mobile
+    local dragging = false
+    local dragInput
+    local dragOffset = Vector2.new(0,0)
+
+    local function updateDrag(input)
+        local pos = input.Position
+        ToggleButton.Position = UDim2.new(0, pos.X - dragOffset.X, 0, pos.Y - dragOffset.Y)
+    end
+
+    ToggleButton.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            local absPos = ToggleButton.AbsolutePosition
+            dragOffset = Vector2.new(input.Position.X - absPos.X, input.Position.Y - absPos.Y)
+            ToggleButton:CaptureFocus()
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                    ToggleButton.ReleaseFocus()
+                end
+            end)
+        end
+    end)
+
+    ToggleButton.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement then
+            dragInput = input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and dragInput and (input == dragInput) then
+            updateDrag(input)
+        end
+    end)
+
+    -- Toggle funcionalidade (mostra/oculta menu)
+    ToggleButton.MouseButton1Click:Connect(function()
+        Config.ShowMenu = not Config.ShowMenu
+        if MenuFrame then MenuFrame.Visible = Config.ShowMenu end
+    end)
+
+    -- Esconde ToggleButton quando em StealthMode falso? manter visível para mobile
+    ToggleButton.Visible = true
+
     MenuFrame.Visible = Config.ShowMenu
 end
 
@@ -474,6 +556,6 @@ end)
 
 print("✅ AIMBOT STEALTH CARREGADO!")
 print("📋 CONTROLES:")
-print("  - ALT+X: Abrir menu oculto")
+print("  - ALT+X / Botão: Abrir menu oculto")
 print("  - E: Ativar aimbot (hold)")
 print("⚠️  Modo STEALTH ativo - Anti-Detection habilitado")
