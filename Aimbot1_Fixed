@@ -1,0 +1,303 @@
+--[[
+    ╔══════════════════════════════════════════════════════════╗
+    ║         PHANTOM HUB - AIMBOT + ESP (DELTA MOBILE FIX)    ║
+    ║          Versão 3.0 - Otimizado para Mobile            ║
+    ╚══════════════════════════════════════════════════════════╝
+]]
+
+-- ═════════════════════════════════════════════════════════════
+-- SERVIÇOS E VARIÁVEIS GLOBAIS
+-- ═════════════════════════════════════════════════════════════
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+-- Detectar se é mobile
+local isMobile = UserInputService.TouchEnabled
+
+-- Estado Global
+local AimbotState = {
+    Enabled = false,
+    TargetPart = "Head",
+    FOV = 120,
+    MaxDistance = 1000,
+    SmoothAim = 0.18,
+    DrawESP = true,
+    DrawBox = true,
+    DrawHealth = true,
+    DrawDistance = true,
+    DrawName = true,
+    IgnoreTeam = false,
+}
+
+local MenuState = {
+    Visible = true,
+    Dragging = false,
+    DragOffset = Vector2.new(0, 0)
+}
+
+local CurrentTarget = nil
+
+-- ═════════════════════════════════════════════════════════════
+-- FUNÇÕES AUXILIARES
+-- ═════════════════════════════════════════════════════════════
+
+local function getCamera()
+    return Workspace.CurrentCamera
+end
+
+local function worldToScreen(pos)
+    if not pos then return nil, false end
+    local camera = getCamera()
+    if not camera then return nil, false end
+    
+    local success, screenPos = pcall(function()
+        return camera:WorldToScreenPoint(pos)
+    end)
+    
+    if success and screenPos then
+        return Vector2.new(screenPos.X, screenPos.Y), screenPos.Z > 0
+    end
+    return nil, false
+end
+
+local function getTargetPart(character, partType)
+    if not character then return nil end
+    
+    if partType == "Head" then
+        return character:FindFirstChild("Head") or character:FindFirstChild("HumanoidRootPart")
+    elseif partType == "Chest" then
+        return character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso") or character:FindFirstChild("HumanoidRootPart")
+    elseif partType == "Root" then
+        return character:FindFirstChild("HumanoidRootPart")
+    end
+    
+    return character:FindFirstChild("HumanoidRootPart")
+end
+
+-- ═════════════════════════════════════════════════════════════
+-- FUNÇÃO: Encontrar Melhor Alvo
+-- ═════════════════════════════════════════════════════════════
+
+local function findBestTarget()
+    local camera = getCamera()
+    if not camera then return nil end
+    
+    local screenCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+    local fovRadius = AimbotState.FOV
+    local closestDist = math.huge
+    local bestTarget = nil
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local humanoid = player.Character:FindFirstChild("Humanoid")
+            local rootPart = player.Character:FindFirstChild("HumanoidRootPart")
+            
+            if humanoid and rootPart and humanoid.Health > 0 then
+                pcall(function()
+                    local distance = (rootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
+                    
+                    if distance <= AimbotState.MaxDistance then
+                        local targetPart = getTargetPart(player.Character, AimbotState.TargetPart)
+                        if targetPart then
+                            local screenPos, onScreen = worldToScreen(targetPart.Position)
+                            
+                            if screenPos and onScreen then
+                                local distToCenter = (screenPos - screenCenter).Magnitude
+                                
+                                if distToCenter < fovRadius and distToCenter < closestDist then
+                                    closestDist = distToCenter
+                                    bestTarget = {
+                                        Player = player,
+                                        Character = player.Character,
+                                        TargetPart = targetPart,
+                                        ScreenPos = screenPos,
+                                        Distance = distance
+                                    }
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+        end
+    end
+    
+    return bestTarget
+end
+
+-- ═════════════════════════════════════════════════════════════
+-- FUNÇÃO: Apontar para Alvo
+-- ═════════════════════════════════════════════════════════════
+
+local function aimAtTarget(target)
+    if not target or not target.TargetPart or not target.TargetPart.Parent then return end
+    
+    local camera = getCamera()
+    if not camera then return end
+    
+    local myChar = LocalPlayer.Character
+    if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
+    
+    pcall(function()
+        local direction = (target.TargetPart.Position - myChar.HumanoidRootPart.Position).Unit
+        local newCFrame = CFrame.new(myChar.HumanoidRootPart.Position, myChar.HumanoidRootPart.Position + direction)
+        camera.CFrame = newCFrame
+        CurrentTarget = target
+    end)
+end
+
+-- ═════════════════════════════════════════════════════════════
+-- CRIAR INTERFACE GUI (MOBILE OPTIMIZED)
+-- ═════════════════════════════════════════════════════════════
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "PhantomHubGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = PlayerGui
+
+-- Botão de Menu (GRANDE para Mobile)
+local menuButton = Instance.new("TextButton")
+menuButton.Name = "MenuButton"
+menuButton.Size = UDim2.new(0, 80, 0, 50)
+menuButton.Position = UDim2.new(0, 10, 0, 10)
+menuButton.BackgroundColor3 = Color3.fromRGB(50, 50, 150)
+menuButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+menuButton.Text = "Menu"
+menuButton.Font = Enum.Font.GothamBold
+menuButton.TextScaled = true
+menuButton.Parent = screenGui
+
+-- Main Menu Frame
+local menuFrame = Instance.new("Frame")
+menuFrame.Name = "MainMenu"
+menuFrame.Size = UDim2.new(0.9, 0, 0.8, 0)
+menuFrame.Position = UDim2.new(0.05, 0, 0.1, 0)
+menuFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+menuFrame.BorderColor3 = Color3.fromRGB(100, 100, 255)
+menuFrame.BorderSizePixel = 2
+menuFrame.Visible = MenuState.Visible
+menuFrame.Parent = screenGui
+
+-- Title Bar
+local titleBar = Instance.new("TextLabel")
+titleBar.Size = UDim2.new(1, 0, 0, 40)
+titleBar.Position = UDim2.new(0, 0, 0, 0)
+titleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 50)
+titleBar.TextColor3 = Color3.fromRGB(100, 200, 255)
+titleBar.Text = "🎯 PHANTOM HUB"
+titleBar.Font = Enum.Font.GothamBold
+titleBar.TextScaled = true
+titleBar.Parent = menuFrame
+
+-- ScrollingFrame para conteúdo
+local scrollFrame = Instance.new("ScrollingFrame")
+scrollFrame.Size = UDim2.new(1, 0, 1, -50)
+scrollFrame.Position = UDim2.new(0, 0, 0, 40)
+scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 600)
+scrollFrame.ScrollBarThickness = 8
+scrollFrame.BackgroundTransparency = 1
+scrollFrame.Parent = menuFrame
+
+-- Helper: Criar Toggle
+local function createToggle(parent, name, initialValue, callback, yPos)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, -10, 0, 40)
+    container.Position = UDim2.new(0, 5, 0, yPos)
+    container.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    container.BorderSizePixel = 0
+    container.Parent = parent
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0.65, 0, 1, 0)
+    label.Position = UDim2.new(0, 5, 0, 0)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(200, 200, 200)
+    label.Text = name
+    label.Font = Enum.Font.Gotham
+    label.TextScaled = true
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = container
+    
+    local toggleBtn = Instance.new("TextButton")
+    toggleBtn.Size = UDim2.new(0.3, 0, 1, 0)
+    toggleBtn.Position = UDim2.new(0.68, 0, 0, 0)
+    toggleBtn.BackgroundColor3 = initialValue and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(100, 100, 100)
+    toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleBtn.Text = initialValue and "ON" or "OFF"
+    toggleBtn.Font = Enum.Font.GothamBold
+    toggleBtn.TextScaled = true
+    toggleBtn.Parent = container
+    
+    toggleBtn.MouseButton1Click:Connect(function()
+        initialValue = not initialValue
+        toggleBtn.BackgroundColor3 = initialValue and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(100, 100, 100)
+        toggleBtn.Text = initialValue and "ON" or "OFF"
+        callback(initialValue)
+    end)
+    
+    return container
+end
+
+-- Criar Opções no Menu
+local yOffset = 10
+
+createToggle(scrollFrame, "Aimbot Enabled", AimbotState.Enabled, function(value) AimbotState.Enabled = value end, yOffset)
+yOffset = yOffset + 45
+
+createToggle(scrollFrame, "Draw ESP", AimbotState.DrawESP, function(value) AimbotState.DrawESP = value end, yOffset)
+yOffset = yOffset + 45
+
+createToggle(scrollFrame, "Draw Box", AimbotState.DrawBox, function(value) AimbotState.DrawBox = value end, yOffset)
+yOffset = yOffset + 45
+
+createToggle(scrollFrame, "Draw Health", AimbotState.DrawHealth, function(value) AimbotState.DrawHealth = value end, yOffset)
+yOffset = yOffset + 45
+
+createToggle(scrollFrame, "Draw Distance", AimbotState.DrawDistance, function(value) AimbotState.DrawDistance = value end, yOffset)
+yOffset = yOffset + 45
+
+createToggle(scrollFrame, "Draw Name", AimbotState.DrawName, function(value) AimbotState.DrawName = value end, yOffset)
+
+scrollFrame.CanvasSize = UDim2.new(0, 0, 0, yOffset + 50)
+
+-- Botão de Toggle do Menu
+menuButton.MouseButton1Click:Connect(function()
+    MenuState.Visible = not MenuState.Visible
+    menuFrame.Visible = MenuState.Visible
+    menuButton.Text = MenuState.Visible and "Menu ✓" or "Menu"
+end)
+
+-- ═════════════════════════════════════════════════════════════
+-- MAIN LOOP - Aimbot
+-- ═════════════════════════════════════════════════════════════
+
+RunService.RenderStepped:Connect(function()
+    pcall(function()
+        if not LocalPlayer or not LocalPlayer.Character then return end
+        
+        local camera = getCamera()
+        if not camera then return end
+        
+        -- AIMBOT (Always active if enabled - sem tecla em mobile)
+        if AimbotState.Enabled then
+            local target = findBestTarget()
+            if target then
+                aimAtTarget(target)
+            end
+        end
+    end)
+end)
+
+-- ═════════════════════════════════════════════════════════════
+-- INFO
+-- ═════════════════════════════════════════════════════════════
+
+print("✅ PHANTOM HUB - AIMBOT CARREGADO COM SUCESSO!")
+print("📱 Versão Mobile Otimizada")
+print("⚠️ USE POR SUA CONTA E RISCO!")
