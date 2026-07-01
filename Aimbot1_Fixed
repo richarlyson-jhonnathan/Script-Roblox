@@ -133,21 +133,29 @@ end
 
 -- ═════════════════════════════════════════════════════════════
 -- FUNÇÃO: Apontar para Alvo
+-- (Correção aplicada: não mover a câmera para a posição do personagem;
+--  apenas rotacionar a câmera para olhar o alvo para evitar que os
+--  braços sejam empurrados para frente da tela)
 -- ═════════════════════════════════════════════════════════════
 
 local function aimAtTarget(target)
     if not target or not target.TargetPart or not target.TargetPart.Parent then return end
-    
     local camera = getCamera()
     if not camera then return end
-    
-    local myChar = LocalPlayer.Character
-    if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
-    
+
     pcall(function()
-        local direction = (target.TargetPart.Position - myChar.HumanoidRootPart.Position).Unit
-        local newCFrame = CFrame.new(myChar.HumanoidRootPart.Position, myChar.HumanoidRootPart.Position + direction)
-        camera.CFrame = newCFrame
+        -- posição atual da câmera (não alteramos para evitar empurrar os braços)
+        local camPos = camera.CFrame.Position
+        local targetPos = target.TargetPart.Position
+        local desiredCFrame = CFrame.new(camPos, targetPos)
+
+        -- Interpolação suave para não saltar instantaneamente
+        if type(AimbotState.SmoothAim) == "number" and AimbotState.SmoothAim > 0 and AimbotState.SmoothAim < 1 then
+            camera.CFrame = camera.CFrame:Lerp(desiredCFrame, AimbotState.SmoothAim)
+        else
+            camera.CFrame = desiredCFrame
+        end
+
         CurrentTarget = target
     end)
 end
