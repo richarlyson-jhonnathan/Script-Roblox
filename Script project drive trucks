@@ -1,4 +1,4 @@
--- ⚠️ APENAS ESTUDO — VERSÃO DE DIAGNÓSTICO + FUNCIONAL
+-- ⚠️ APENAS ESTUDO — COM BOTÃO DE LIGAR/DESLIGAR
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local Camera = workspace.CurrentCamera
@@ -6,29 +6,59 @@ local jogadorLocal = Players.LocalPlayer
 
 -- CONFIGURAÇÕES
 local Config = {
-    DistanciaMax = 800,
+    DistanciaMax = 400,
     EspessuraBorda = 2,
-    TamanhoTexto = 13
+    TamanhoTexto = 11,
+    Ligado = true -- Estado inicial
 }
 
--- INTERFACE
+-- INTERFACE PRINCIPAL
 local guiPrincipal = Instance.new("ScreenGui")
 guiPrincipal.Name = "SistemaDestaque"
 guiPrincipal.ResetOnSpawn = false
 guiPrincipal.DisplayOrder = 500
 guiPrincipal.Parent = jogadorLocal:WaitForChild("PlayerGui")
 
+-- BOTÃO DE CONTROLE
+local Botao = Instance.new("TextButton")
+Botao.Name = "BotaoControle"
+Botao.Size = UDim2.new(0, 80, 0, 35)
+Botao.Position = UDim2.new(0.02, 0, 0.02, 0)
+Botao.BackgroundColor3 = Color3.new(0.2, 0.7, 0.2)
+Botao.Text = "LIGADO"
+Botao.TextColor3 = Color3.new(1,1,1)
+Botao.Font = Enum.Font.GothamBold
+Botao.TextSize = 12
+Botao.BorderSizePixel = 0
+Instance.new("UICorner", Botao).CornerRadius = UDim.new(0,6)
+Botao.Parent = guiPrincipal
+
 local desenhosAtivos = {}
 
--- COR POR VALOR
+-- ALTERNAR ESTADO
+Botao.MouseButton1Click:Connect(function()
+    Config.Ligado = not Config.Ligado
+    if Config.Ligado then
+        Botao.BackgroundColor3 = Color3.new(0.2, 0.7, 0.2)
+        Botao.Text = "LIGADO"
+    else
+        Botao.BackgroundColor3 = Color3.new(0.7, 0.2, 0.2)
+        Botao.Text = "DESLIGADO"
+        -- Limpa tudo ao desligar
+        for _, estrutura in pairs(desenhosAtivos) do
+            estrutura.Porta:Destroy()
+        end
+        table.clear(desenhosAtivos)
+    end
+end)
+
+-- REGRA DE COR
 local function ObterCorPorValor(valor)
-    if valor >= 1000 then return Color3.new(0, 1, 0) end
-    if valor >= 500 then return Color3.new(1, 0.8, 0) end
-    if valor >= 200 then return Color3.new(1, 0.4, 0) end
+    valor = tonumber(valor) or 0
+    if valor >= 30 then return Color3.new(0, 1, 0) end
     return Color3.new(1, 0, 0)
 end
 
--- CRIAR DESTAQUE
 local function CriarDestaque(alvo)
     local porta = Instance.new("Frame")
     porta.BackgroundTransparency = 1
@@ -46,28 +76,24 @@ local function CriarDestaque(alvo)
     informacao.TextSize = Config.TamanhoTexto
     informacao.TextStrokeTransparency = 0
     informacao.TextStrokeColor3 = Color3.new(0,0,0)
-    informacao.Size = UDim2.new(0, 300, 0, 22)
+    informacao.Size = UDim2.new(0, 140, 0, 18)
+    informacao.TextTruncate = Enum.TextTruncate.AtEnd
     informacao.Parent = porta
 
     desenhosAtivos[alvo] = {Porta=porta, Traco=traco, Texto=informacao}
 end
 
--- 🔍 NOVA BUSCA: VARRE TODO O MAPA E MOSTRA O QUE ENCONTRA
 local function PegarDadosItem(alvo)
     local valor = 0
     local nomeItem = "Caixa"
     local atual = alvo
-
-    -- Sobe toda a hierarquia até chegar ao topo
     while atual do
-        -- Tenta atributos
         if valor <= 0 then
             valor = atual:GetAttribute("price") or atual:GetAttribute("Value") or 0
         end
         if nomeItem == "Caixa" then
             nomeItem = atual:GetAttribute("PackageContent") or nomeItem
         end
-        -- Tenta objetos filhos
         if valor <= 0 then
             local v = atual:FindFirstChild("price") or atual:FindFirstChild("Value")
             if v and v:IsA("NumberValue") then valor = v.Value end
@@ -78,12 +104,15 @@ local function PegarDadosItem(alvo)
         end
         atual = atual.Parent
     end
-
-    return valor, nomeItem
+    if valor <= 0 then valor = math.floor((alvo.Size.X * alvo.Size.Y * alvo.Size.Z) * 50) end
+    return tonumber(valor) or 0, nomeItem
 end
 
 -- LOOP PRINCIPAL
 RunService.RenderStepped:Connect(function()
+    -- Se desligado, não faz nada
+    if not Config.Ligado then return end
+
     -- Limpa o que sumiu
     for alvo, estrutura in pairs(desenhosAtivos) do
         if not alvo or not alvo:IsDescendantOf(workspace) then
@@ -92,39 +121,39 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- ✅ AGORA BUSCA EM TODO O MAPA, NÃO SÓ NO CAMINHO FIXO
+    -- Varre mapa
     for _, obj in pairs(workspace:GetDescendants()) do
-        if obj:IsA("MeshPart") and obj.Name == "wooden crate" then
-            local valor, nomeItem = PegarDadosItem(obj)
+        local nome = string.lower(obj.Name)
+        local ehCaixa = obj:IsA("MeshPart") and (nome == "wooden crate" or nome == "crate" or nome == "caixa")
+        if not ehCaixa then continue end
 
-            -- Se não achou valor, usa cálculo temporário para aparecer
-            if valor <= 0 then
-                valor = math.floor((obj.Size.X * obj.Size.Y * obj.Size.Z) * 50)
-            end
+        local valor, nomeItem = PegarDadosItem(obj)
+        local centro = obj.Position
+        local distancia = (centro - Camera.CFrame.Position).Magnitude
+        if distancia > Config.DistanciaMax then continue end
 
-            local centro = obj.Position
-            local distancia = (centro - Camera.CFrame.Position).Magnitude
-            if distancia > Config.DistanciaMax then continue end
+        local posTela, visivel = Camera:WorldToScreenPoint(centro)
+        if not visivel or posTela.Z < 0 then continue end
 
-            local posTela, visivel = Camera:WorldToScreenPoint(centro)
-            if not visivel or posTela.Z < 0 then continue end
+        if not desenhosAtivos[obj] then CriarDestaque(obj) end
 
-            -- Cria ou atualiza
-            if not desenhosAtivos[obj] then CriarDestaque(obj) end
+        local escala = 0.45
+        local cantoD = Camera:WorldToViewportPoint(centro + Vector3.new(obj.Size.X * escala, obj.Size.Y * escala, 0))
+        local cantoE = Camera:WorldToViewportPoint(centro - Vector3.new(obj.Size.X * escala, obj.Size.Y * escala, 0))
+        local largura = math.abs(cantoD.X - cantoE.X)
+        local altura = math.abs(cantoD.Y - cantoE.Y)
 
-            local cantoD = Camera:WorldToViewportPoint(centro + Vector3.new(obj.Size.X/2, obj.Size.Y/2, 0))
-            local cantoE = Camera:WorldToViewportPoint(centro - Vector3.new(obj.Size.X/2, obj.Size.Y/2, 0))
-            local largura = math.abs(cantoD.X - cantoE.X)
-            local altura = math.abs(cantoD.Y - cantoE.Y)
-            local cor = ObterCorPorValor(valor)
-            local estrutura = desenhosAtivos[obj]
+        if largura < 12 then largura = 12 end
+        if altura < 12 then altura = 12 end
 
-            estrutura.Porta.Position = UDim2.new(0, posTela.X, 0, posTela.Y)
-            estrutura.Porta.Size = UDim2.new(0, largura, 0, altura)
-            estrutura.Traco.Color = cor
-            estrutura.Texto.Position = UDim2.new(0.5, 0, 0, -12)
-            estrutura.Texto.Text = string.format("%s | $%d | %.0fm", nomeItem, valor, distancia)
-            estrutura.Texto.TextColor3 = cor
-        end
+        local cor = ObterCorPorValor(valor)
+        local estrutura = desenhosAtivos[obj]
+
+        estrutura.Porta.Position = UDim2.new(0, posTela.X, 0, posTela.Y)
+        estrutura.Porta.Size = UDim2.new(0, largura, 0, altura)
+        estrutura.Traco.Color = cor
+        estrutura.Texto.Position = UDim2.new(0.5, 0, 0, -8)
+        estrutura.Texto.Text = string.format("%s | $%d | %.0fm", nomeItem, valor, distancia)
+        estrutura.Texto.TextColor3 = cor
     end
 end)
