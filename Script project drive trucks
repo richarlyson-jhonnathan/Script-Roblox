@@ -1,0 +1,272 @@
+-- ⚠️ APENAS ESTUDO | PROJECT DRIVE TRUCKS | VERSÃO CORRIGIDA DEFINITIVA
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
+local SoundService = game:GetService("SoundService")
+local TweenService = game:GetService("TweenService")
+
+local Camera = Workspace.CurrentCamera
+local Jogador = Players.LocalPlayer
+local PlayerGui = Jogador:WaitForChild("PlayerGui", 30)
+
+-- ==================================================
+-- ⚙️ CONFIGURAÇÕES
+-- ==================================================
+local CFG = {
+    DISTANCIA_MAX  = 900,
+    TAM_TEXTO      = 14,
+    FONTE          = Enum.Font.GothamBold,
+    NOME_CAIXA     = "wooden crate",
+    VALOR_ALTO     = 50,
+    TEMPO_SOM      = 7,
+    BT_X = 12,
+    BT_Y = 0.16, -- ESQUERDA BEM MAIS PRA CIMA
+}
+
+local NIVEIS = {
+    {min=0,  cor=Color3.new(1,0,0),    estilo="solido", g1=1.5},
+    {min=11, cor=Color3.new(1,0.45,0), estilo="trace",  g1=2},
+    {min=21, cor=Color3.new(1,0.85,0), estilo="grosso", g1=3},
+    {min=36, cor=Color3.new(0,1,0.25), estilo="duplo",  g1=2},
+    {min=50, cor=Color3.new(0,0.92,1), estilo="pisca",  g1=3},
+}
+
+-- ==================================================
+-- 🧠 CONTROLE — ESTADO REAL, NUNCA MAIS FICA PRESO
+-- ==================================================
+local ESP_LIGADO = true
+local MENU_ABERTO = false
+local CACHE = {}
+local LISTA_CAIXAS = {}
+local SOM_JA = {}
+
+-- ==================================================
+-- 🖼️ INTERFACE
+-- ==================================================
+local GUI = Instance.new("ScreenGui")
+GUI.Name = "ESP_PDT"
+GUI.ResetOnSpawn = false
+GUI.DisplayOrder = 200
+GUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+GUI.Parent = PlayerGui
+
+-- ⚙️ BOTÃO MENU
+local BT = Instance.new("TextButton")
+BT.Size, BT.Position = UDim2.new(0,54,0,54), UDim2.new(0,CFG.BT_X,CFG.BT_Y,0)
+BT.BackgroundColor3 = Color3.new(0.12,0.12,0.14)
+BT.BorderSizePixel, BT.Text, BT.TextScaled = 0, "⚙️", true
+BT.AutoLocalize, BT.ZIndex = false, 20
+Instance.new("UICorner",BT).CornerRadius = UDim.new(1,0)
+local sb = Instance.new("UIStroke",BT) sb.Color,sb.Thickness = Color3.new(0,0.85,1),1.6
+BT.Parent = GUI
+
+-- 📦 PAINEL
+local PN = Instance.new("Frame")
+PN.Size, PN.Position = UDim2.new(0,215,0,120), UDim2.new(0,CFG.BT_X+62,CFG.BT_Y,0)
+PN.BackgroundColor3, PN.BackgroundTransparency = Color3.new(0.07,0.07,0.09), 0.12
+PN.BorderSizePixel, PN.Visible, PN.ZIndex = 0, false, 15
+Instance.new("UICorner",PN).CornerRadius = UDim.new(0,9)
+Instance.new("UIStroke",PN).Color = Color3.new(0,0.7,1)
+PN.Parent = GUI
+
+local TL = Instance.new("TextLabel",PN)
+TL.Size,TL.BackgroundTransparency = UDim2.new(1,0,0,30),1
+TL.Text,TL.TextColor3,TL.Font,TL.TextSize = "🚛 ESP DRIVE TRUCKS",Color3.new(1,1,1),CFG.FONTE,14
+
+-- ✅ BOTÃO LIGA/DESLIGA — AGORA SINCRONIZADO DE VERDADE
+local BT_ESP = Instance.new("TextButton",PN)
+BT_ESP.Size,BT_ESP.Position = UDim2.new(0.92,0,0,40),UDim2.new(0.04,0,0,40)
+BT_ESP.BorderSizePixel,BT_ESP.Font,BT_ESP.TextSize,BT_ESP.AutoLocalize = 0,CFG.FONTE,14,false
+Instance.new("UICorner",BT_ESP).CornerRadius = UDim.new(0,8)
+
+-- 🚨 SOM
+local SOM = Instance.new("Sound")
+SOM.SoundId,SOM.Volume,SOM.Looped = "rbxassetid://138110022",0.6,false
+SOM.Parent = SoundService
+
+-- 🚨 AVISO TELA
+local AVISO = Instance.new("TextLabel")
+AVISO.Size,AVISO.Position = UDim2.new(0,340,0,50),UDim2.new(0.5,0,0.10,0)
+AVISO.AnchorPoint,AVISO.BackgroundColor3 = Vector2.new(0.5,0),Color3.new(0,0.55,1)
+AVISO.BackgroundTransparency,AVISO.BorderSizePixel,AVISO.Visible = 0.22,0,false
+AVISO.Font,AVISO.TextSize,AVISO.TextColor3,AVISO.TextStrokeTransparency = CFG.FONTE,17,Color3.new(1,1,1),0
+Instance.new("UICorner",AVISO).CornerRadius = UDim.new(0,9)
+AVISO.Parent = GUI
+
+-- ==================================================
+-- 🔧 FUNÇÃO QUE ATUALIZA BOTÃO IGUAL AO ESTADO REAL — NUNCA MAIS ERRADO
+-- ==================================================
+local function AtualizarBotaoESP()
+    if ESP_LIGADO then
+        BT_ESP.Text = "✅ ESP LIGADO"
+        BT_ESP.BackgroundColor3 = Color3.new(0,0.72,0.22)
+    else
+        BT_ESP.Text = "❌ ESP DESLIGADO"
+        BT_ESP.BackgroundColor3 = Color3.new(0.72,0.1,0.1)
+    end
+end
+AtualizarBotaoESP() -- ✅ SINCRONIZA LOGO NO INÍCIO
+
+-- ==================================================
+-- 🖱️ CLIQUE SÓ NOS BOTÕES — NÃO NA TELA TODA
+-- ==================================================
+local function AlternarMenu()
+    MENU_ABERTO = not MENU_ABERTO
+    PN.Visible = MENU_ABERTO
+    TweenService:Create(BT,TweenInfo.new(.18),{Rotation=MENU_ABERTO and 90 or 0}):Play()
+end
+BT.MouseButton1Down:Connect(AlternarMenu)
+BT.TouchStarted:Connect(AlternarMenu)
+
+local function AlternarESP()
+    ESP_LIGADO = not ESP_LIGADO
+    AtualizarBotaoESP() -- ✅ ATUALIZA NA HORA
+    if not ESP_LIGADO then
+        for _,d in pairs(CACHE) do pcall(function() d.Q.Visible=false end) end
+    end
+end
+BT_ESP.MouseButton1Down:Connect(AlternarESP)
+BT_ESP.TouchStarted:Connect(AlternarESP)
+
+-- ==================================================
+-- 📦 BUSCA + ✅ A GRANDE CORREÇÃO: PEGA VALOR DE PackageLink TAMBÉM
+-- ==================================================
+local function PegarDadosCaixa(o)
+    -- Tenta DIRETO na peça
+    local v = o:GetAttribute("Value")
+    local n = o:GetAttribute("PackageContent")
+    -- ✅ SE NÃO ACHAR, BUSCA DENTRO DO PackageLink — ONDE O JOGO REALMENTE GUARDA
+    if not v or not n then
+        local link = o:FindFirstChild("PackageLink")
+        if link then
+            v = v or link:GetAttribute("Value")
+            n = n or link:GetAttribute("PackageContent")
+        end
+    end
+    return tonumber(v) or 0, tostring(n or "Item")
+end
+
+task.spawn(function()
+    while task.wait(.6) do
+        table.clear(LISTA_CAIXAS)
+        local ok,desc = pcall(Workspace.GetDescendants,Workspace)
+        if not ok then continue end
+        for _,o in desc do
+            pcall(function()
+                if o:IsA("BasePart") and o.Name==CFG.NOME_CAIXA then
+                    table.insert(LISTA_CAIXAS,o)
+                end
+            end)
+        end
+    end
+end)
+
+-- ==================================================
+-- 📐 AUXILIARES
+-- ==================================================
+local function Nivel(v) local r=NIVEIS[1] for _,n in NIVEIS do if v>=n.min then r=n end end return r end
+local function Visivel(pos)
+    local d=pos-Camera.CFrame.Position local m=d.Magnitude
+    if m<1 then return true end
+    local rp=RaycastParams.new()
+    rp.FilterType=Enum.RaycastFilterType.Exclude
+    rp.FilterDescendantsInstances={Jogador.Character or {}}
+    rp.IgnoreWater=true
+    return Workspace:Raycast(Camera.CFrame.Position,d.Unit*(m-.8),rp)==nil
+end
+
+-- ==================================================
+-- 🔄 LOOP PRINCIPAL
+-- ==================================================
+RunService.RenderStepped:Connect(function()
+    if not ESP_LIGADO then return end
+    if not Camera then Camera=Workspace.CurrentCamera end
+    local t=os.clock()
+
+    -- LIMPEZA
+    for o,d in pairs(CACHE) do
+        if not o or not o:IsDescendantOf(Workspace) or o.Name~=CFG.NOME_CAIXA then
+            pcall(function() d.Q:Destroy() end) CACHE[o]=nil
+        end
+    end
+
+    for _,o in pairs(LISTA_CAIXAS) do
+        -- ✅ AGORA PEGA DADOS CERTO, MESMO ESTANDO DENTRO DE PackageLink
+        local valor, item = PegarDadosCaixa(o)
+        if valor<=0 then continue end
+
+        local dist=(o.Position-Camera.CFrame.Position).Magnitude
+        if dist>CFG.DISTANCIA_MAX then
+            if CACHE[o] then pcall(function() CACHE[o].Q.Visible=false end) end
+            continue
+        end
+
+        local s=o.Size/2 local cf=o.CFrame
+        local pts={
+            cf*Vector3.new(-s.x,-s.y,-s.z),cf*Vector3.new(s.x,-s.y,-s.z),
+            cf*Vector3.new(-s.x,s.y,-s.z), cf*Vector3.new(s.x,s.y,-s.z),
+            cf*Vector3.new(-s.x,-s.y,s.z), cf*Vector3.new(s.x,-s.y,s.z),
+            cf*Vector3.new(-s.x,s.y,s.z),  cf*Vector3.new(s.x,s.y,s.z),
+        }
+        local x1,y1,x2,y2=1e8,1e8,-1e8,-1e8 local ok=false
+        for _,p3 in pts do
+            local p2,v=Camera:WorldToScreenPoint(p3)
+            if v and p2.Z>0 then ok=true
+                x1=math.min(x1,p2.X) y1=math.min(y1,p2.Y)
+                x2=math.max(x2,p2.X) y2=math.max(y2,p2.Y)
+            end
+        end
+        if not ok or not Visivel(o.Position) then
+            if CACHE[o] then pcall(function() CACHE[o].Q.Visible=false end) end
+            continue
+        end
+
+        local L=math.clamp(x2-x1,12,400)
+        local A=math.clamp(y2-y1,12,400)
+        if L~=L or A~=A then continue end
+
+        -- AVISO SONORO
+        if valor>=CFG.VALOR_ALTO and not SOM_JA[o] then
+            SOM_JA[o]=true SOM:Play()
+            AVISO.Text=string.upper("💎 RARA: "..item.."  $"..valor.."  "..math.floor(dist).."m")
+            AVISO.Visible=true task.delay(3.5,function() AVISO.Visible=false end)
+            task.delay(CFG.TEMPO_SOM,function() SOM_JA[o]=nil end)
+        end
+
+        local nv=Nivel(valor)
+
+        if not CACHE[o] then
+            local Q=Instance.new("Frame") Q.BackgroundTransparency=1 Q.ZIndex=5 Q.Parent=GUI
+            local B1=Instance.new("UIStroke",Q) B1.ApplyStrokeMode=Enum.ApplyStrokeMode.Border
+            local B2=Instance.new("UIStroke",Q) B2.ApplyStrokeMode=Enum.ApplyStrokeMode.Border B2.Thickness=0
+            local TX=Instance.new("TextLabel",Q)
+            TX.BackgroundTransparency=1 TX.TextSize=CFG.TAM_TEXTO TX.Font=CFG.FONTE
+            TX.TextStrokeTransparency=0 TX.TextStrokeColor3=Color3.new()
+            TX.AnchorPoint=Vector2.new(.5,1) TX.AutomaticSize=Enum.AutomaticSize.XY
+            CACHE[o]={Q=Q,B1=B1,B2=B2,TX=TX}
+        end
+
+        local D=CACHE[o]
+        D.Q.Visible=true
+        D.Q.Position=UDim2.fromOffset(x1,y1)
+        D.Q.Size=UDim2.fromOffset(L,A)
+        D.B1.Color=nv.cor D.B1.Thickness=nv.g1 D.B1.Transparency=0
+        D.B2.Thickness=0
+
+        if nv.estilo=="trace"  then D.B1.Transparency=.3+math.abs(math.sin(t*4))*.55
+        elseif nv.estilo=="duplo" then D.B2.Thickness=1 D.B2.Color=Color3.new(0,0,0)
+        elseif nv.estilo=="pisca" then
+            D.B1.Transparency=math.abs(math.sin(t*7))*.5
+            D.B2.Thickness=1.2 D.B2.Color=Color3.new(1,1,1)
+        end
+
+        D.TX.Position=UDim2.new(.5,0,0,-5)
+        D.TX.TextColor3=nv.cor
+        D.TX.Text=string.upper(item.."  $"..valor.."  "..math.floor(dist).."m")
+    end
+end)
+
+script.Destroying:Connect(function()
+    for _,d in pairs(CACHE) do pcall(function() d.Q:Destroy() end) end
+    table.clear(CACHE) GUI:Destroy() SOM:Destroy()
+end)
