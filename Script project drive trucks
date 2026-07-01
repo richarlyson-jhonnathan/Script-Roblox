@@ -39,6 +39,7 @@ local MENU_ABERTO = false
 local CACHE = {}
 local LISTA_CAIXAS = {}
 local SOM_JA = {}
+local CLICANDO_ESP = false -- ✅ DEBOUNCE PARA EVITAR CLIQUES DUPLOS
 
 -- ==================================================
 -- 🖼️ INTERFACE
@@ -118,13 +119,24 @@ end
 BT.MouseButton1Down:Connect(AlternarMenu)
 BT.TouchStarted:Connect(AlternarMenu)
 
+-- ✅ CORREÇÃO COMPLETA: DEBOUNCE + SINCRONIZAÇÃO GARANTIDA
 local function AlternarESP()
+    if CLICANDO_ESP then return end -- Evita cliques duplos
+    CLICANDO_ESP = true
+    
     ESP_LIGADO = not ESP_LIGADO
     AtualizarBotaoESP() -- ✅ ATUALIZA NA HORA
+    
     if not ESP_LIGADO then
-        for _,d in pairs(CACHE) do pcall(function() d.Q.Visible=false end) end
+        for _,d in pairs(CACHE) do 
+            pcall(function() d.Q.Visible=false end) 
+        end
     end
+    
+    task.wait(0.1) -- Debounce de 100ms
+    CLICANDO_ESP = false
 end
+
 BT_ESP.MouseButton1Down:Connect(AlternarESP)
 BT_ESP.TouchStarted:Connect(AlternarESP)
 
